@@ -1,0 +1,13 @@
+# Cloudflare Workers Development Variables
+# Copy this file to .dev.vars and fill in your values
+
+# Google OAuth 2.0 (for Drive upload via user authorization)
+# Get from: https://console.cloud.google.com/apis/credentials
+# 1. Create OAuth 2.0 Client ID
+# 2. Add authorized redirect URI: http://localhost:8787/auth/google/callback
+# 3. Copy Client ID and Client Secret
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173

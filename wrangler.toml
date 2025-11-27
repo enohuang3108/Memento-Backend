@@ -1,0 +1,68 @@
+name = "memento-api"
+main = "src/index.ts"
+compatibility_date = "2024-11-17"
+compatibility_flags = ["nodejs_compat"]
+
+# KV Namespaces for system tokens
+[[kv_namespaces]]
+binding = "SYSTEM_TOKENS"
+id = "edc81ccea1ba4bb3953a018805d69afa"
+preview_id = "aa59a8bddf824ee0823515db3a9cb7da"
+
+# Durable Objects configuration
+[[durable_objects.bindings]]
+name = "EVENT_ROOM"
+class_name = "EventRoom"
+script_name = "memento-api"
+
+# Durable Objects migrations
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["EventRoom"]
+
+# Development environment (local testing)
+[env.dev]
+name = "memento-api-dev"
+vars = { CORS_ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000" }
+
+# Beta environment
+[env.beta]
+name = "memento-api-beta"
+vars = { CORS_ALLOWED_ORIGINS = "https://memento.oddlab.cc,http://localhost:3000" }
+
+# KV Namespaces for beta
+[[env.beta.kv_namespaces]]
+binding = "SYSTEM_TOKENS"
+id = "1cd2a8f2bc4b42cb9a270d5c740ecdb9"
+
+# Durable Objects for beta
+[[env.beta.durable_objects.bindings]]
+name = "EVENT_ROOM"
+class_name = "EventRoom"
+script_name = "memento-api-beta"
+
+# Routes for beta
+routes = [
+	{ pattern = "beta.memento-api.oddlabcc.cc", custom_domain = true }
+]
+
+# Production environment
+[env.production]
+name = "memento-api-production"
+vars = { CORS_ALLOWED_ORIGINS = "https://memento.oddlab.cc" }
+
+# KV Namespaces for production
+[[env.production.kv_namespaces]]
+binding = "SYSTEM_TOKENS"
+id = "a53f2a1e4769418480108ab9df6716b3"
+
+# Durable Objects for production
+[[env.production.durable_objects.bindings]]
+name = "EVENT_ROOM"
+class_name = "EventRoom"
+script_name = "memento-api-production"
+
+# Routes for production
+routes = [
+	{ pattern = "memento-api.oddlabcc.cc", custom_domain = true }
+]

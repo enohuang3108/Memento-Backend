@@ -1,0 +1,25 @@
+{
+  "name": "memento-workers",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.toml --port 8787",
+    "dev:local": "wrangler dev --config wrangler.toml --local --port 8787",
+    "build": "wrangler deploy --config wrangler.toml --dry-run",
+    "deploy": "wrangler deploy --config wrangler.toml",
+    "deploy:beta": "wrangler deploy --config wrangler.toml --env beta",
+    "deploy:production": "wrangler deploy --config wrangler.toml --env production",
+    "test": "vitest run",
+    "test:integration": "vitest run tests/integration"
+  },
+  "dependencies": {
+    "googleapis": "^144.0.0",
+    "ulid": "^3.0.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5",
+    "wrangler": "^3.95.0"
+  }
+}

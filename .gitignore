@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.output/
+
+# Wrangler local state and cache
+.wrangler/
+.dev.vars
+
+# OS files
+.DS_Store
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+
+# Environment variables (keep .dev.vars.example)
+.env
+.env.local
+.env.*.local
