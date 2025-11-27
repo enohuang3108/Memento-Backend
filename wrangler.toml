@@ -28,7 +28,7 @@ vars = { CORS_ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000" }
 # Beta environment
 [env.beta]
 name = "memento-api-beta"
-vars = { CORS_ALLOWED_ORIGINS = "https://memento.oddlab.cc,http://localhost:3000" }
+vars = { CORS_ALLOWED_ORIGINS = "https://memento.oddlab.cc,https://beta.memento.oddlab.cc,http://localhost:3000" }
 
 # KV Namespaces for beta
 [[env.beta.kv_namespaces]]

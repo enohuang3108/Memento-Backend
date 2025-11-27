@@ -19,7 +19,8 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
       'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+      'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Max-Age': '86400',
     }
 
@@ -83,6 +84,14 @@ export default {
     const wsMatch = url.pathname.match(/^\/events\/([a-zA-Z0-9-_]+)\/ws$/)
     if (wsMatch && request.headers.get('Upgrade') === 'websocket') {
       const activityId = wsMatch[1]
+
+      // Check Origin for WebSocket connections
+      const origin = request.headers.get('Origin')
+      const allowedOrigins = env.CORS_ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000']
+
+      if (origin && !allowedOrigins.includes(origin)) {
+        return new Response('Origin not allowed', { status: 403, headers: corsHeaders })
+      }
 
       // Decrypt ID to get internal Drive Folder ID
       const internalId = decryptId(activityId)

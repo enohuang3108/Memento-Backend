@@ -33,11 +33,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        run: npx tsc --noEmit
-
-      - name: Build check
-        run: pnpm build
+      - name: Type check & Build
+        run: pnpm build:check
 
       - name: Check Summary
         run: |
