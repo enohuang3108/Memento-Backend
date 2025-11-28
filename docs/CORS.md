@@ -14,13 +14,14 @@ Access-Control-Max-Age: 86400 (24 小時)
 
 ### 允許的來源（依環境）
 
-| 環境 | 允許的 Origins | Pattern (Regex) |
-|------|---------------|-----------------|
-| **Development** | `http://localhost:3000`, `http://127.0.0.1:3000` | - |
-| **Beta** | `https://memento.oddlab.cc`, `http://localhost:3000` | `^https://.*-memento\\.oddlabcc\\.workers\\.dev$` |
-| **Production** | `https://memento.oddlab.cc` | - |
+| 環境            | 允許的 Origins                                       | Pattern (Regex)                                   |
+| --------------- | ---------------------------------------------------- | ------------------------------------------------- |
+| **Development** | `http://localhost:3000`, `http://127.0.0.1:3000`     | -                                                 |
+| **Beta**        | `https://memento.oddlab.cc`, `http://localhost:3000` | `^https://.*-memento\\.oddlabcc\\.workers\\.dev$` |
+| **Production**  | `https://memento.oddlab.cc`                          | -                                                 |
 
 **Beta 環境說明：**
+
 - 精確匹配：正式網域 + localhost
 - Pattern 匹配：支援 Cloudflare Workers 的動態部署網域（例如：`https://branch-name-memento.oddlabcc.workers.dev`）
 
@@ -84,10 +85,11 @@ Content-Type: application/json
 WebSocket 連線也會檢查 Origin：
 
 ```javascript
-const ws = new WebSocket('wss://memento-api.oddlabcc.cc/events/xxx/ws')
+const ws = new WebSocket("wss://memento-api.oddlab.cc/events/xxx/ws");
 ```
 
 Worker 會：
+
 1. 檢查 `Origin` header
 2. 驗證是否在允許清單中
 3. 允許或拒絕連線
@@ -99,6 +101,7 @@ Worker 會：
 ### 修改 wrangler.toml
 
 支援兩種方式配置 CORS：
+
 1. **精確匹配** - 使用 `CORS_ALLOWED_ORIGINS`（逗號分隔）
 2. **Regex Pattern** - 使用 `CORS_ALLOWED_PATTERN`（支援 wildcard domains）
 
@@ -121,6 +124,7 @@ vars = { CORS_ALLOWED_ORIGINS = "https://memento.oddlab.cc" }
 ```
 
 **重要提醒：**
+
 - `CORS_ALLOWED_PATTERN` 必須是有效的 JavaScript RegExp pattern
 - Pattern 會在 Worker 程式碼中使用 `new RegExp()` 建立
 - 使用 TOML table 格式 `[env.beta.vars]` 來定義多個變數
@@ -134,6 +138,7 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 ```
 
 **注意：**
+
 - 多個 origin 用逗號分隔，**不要有空格**
 - `.dev.vars` 不支援 TOML table 格式，只能使用 `KEY=VALUE` 格式
 
@@ -148,12 +153,14 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 **解決方法：**
 
 1. 檢查前端請求的 Origin：
+
    ```javascript
-   console.log(window.location.origin)
+   console.log(window.location.origin);
    // 例如: https://memento.oddlabcc.cc
    ```
 
 2. 確認 `wrangler.toml` 包含該 Origin：
+
    ```toml
    vars = { CORS_ALLOWED_ORIGINS = "https://memento.oddlabcc.cc" }
    ```
@@ -169,8 +176,9 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 **已修正：** 現在所有回應都包含 `Access-Control-Allow-Credentials: true`
 
 **前端使用：**
+
 ```javascript
-fetch('https://memento-api.oddlabcc.cc/events', {
+fetch('https://memento-api.oddlab.cc/events', {
   method: 'POST',
   credentials: 'include', // 會攜帶 cookies
   headers: {
@@ -187,6 +195,7 @@ fetch('https://memento-api.oddlabcc.cc/events', {
 **原因：** 使用的 header 不在允許清單中
 
 **已允許的 Headers：**
+
 - `Content-Type`
 - `Authorization`
 - `X-Requested-With`
@@ -208,13 +217,15 @@ fetch('https://memento-api.oddlabcc.cc/events', {
 **檢查步驟：**
 
 1. 確認前端 Origin：
+
    ```javascript
-   console.log(window.location.origin)
+   console.log(window.location.origin);
    ```
 
 2. 檢查 WebSocket 建立時的 Origin：
+
    ```javascript
-   const ws = new WebSocket('wss://memento-api.oddlabcc.cc/events/xxx/ws')
+   const ws = new WebSocket("wss://memento-api.oddlab.cc/events/xxx/ws");
    // 瀏覽器會自動帶上 Origin header
    ```
 
@@ -227,12 +238,14 @@ fetch('https://memento-api.oddlabcc.cc/events', {
 ### 問題 5: 本地開發 CORS 錯誤
 
 **常見情況：**
+
 - 前端在 `http://localhost:5173` (Vite)
 - 但 `CORS_ALLOWED_ORIGINS` 只有 `http://localhost:3000`
 
 **解決方法：**
 
 1. 修改 `.dev.vars`：
+
    ```env
    CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000
    ```
@@ -250,7 +263,7 @@ fetch('https://memento-api.oddlabcc.cc/events', {
 
 ```bash
 # Preflight request
-curl -X OPTIONS https://memento-api.oddlabcc.cc/events \
+curl -X OPTIONS https://memento-api.oddlab.cc/events \
   -H "Origin: https://memento.oddlabcc.cc" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: Content-Type" \
@@ -258,6 +271,7 @@ curl -X OPTIONS https://memento-api.oddlabcc.cc/events \
 ```
 
 **預期回應：**
+
 ```
 < HTTP/2 200
 < access-control-allow-origin: https://memento.oddlabcc.cc
@@ -332,24 +346,25 @@ Worker 程式碼中的 CORS 檢查流程：
 
 ```typescript
 function getAllowedOrigin(request: Request, env: Env): string {
-  const origin = request.headers.get('Origin') || ''
+  const origin = request.headers.get("Origin") || "";
 
   // 1. 檢查精確匹配
-  const allowedOrigins = env.CORS_ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || []
+  const allowedOrigins =
+    env.CORS_ALLOWED_ORIGINS?.split(",").map((o) => o.trim()) || [];
   if (allowedOrigins.includes(origin)) {
-    return origin
+    return origin;
   }
 
   // 2. 檢查 regex pattern 匹配
   if (env.CORS_ALLOWED_PATTERN) {
-    const pattern = new RegExp(env.CORS_ALLOWED_PATTERN)
+    const pattern = new RegExp(env.CORS_ALLOWED_PATTERN);
     if (pattern.test(origin)) {
-      return origin
+      return origin;
     }
   }
 
   // 3. 不匹配則返回 '*'（不帶 credentials）
-  return '*'
+  return "*";
 }
 ```
 

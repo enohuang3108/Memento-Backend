@@ -22,8 +22,8 @@
   - **Durable Objects**: 處理 WebSocket 連線與活動房間狀態 (`EventRoom`)
   - **KV**: 儲存系統 Token (`SYSTEM_TOKENS`)
 - **部署**: GitHub Actions (Tag-based)
-  - **Production**: Tag `v*` -> `memento-api.oddlabcc.cc`
-  - **Beta**: Tag `v*b*` -> `beta.memento-api.oddlabcc.cc`
+  - **Production**: Tag `v*` -> `memento-api.oddlab.cc`
+  - **Beta**: Tag `v*b*` -> `beta.memento-api.oddlab.cc`
 - **目錄**: `/workers`
 
 ### 開發流程

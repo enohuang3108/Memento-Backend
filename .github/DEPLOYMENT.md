@@ -6,11 +6,11 @@
 
 ### 環境配置
 
-| 環境 | 觸發方式 | 網域 | Workflow |
-|------|---------|------|----------|
-| **Production** | Tag `v*` (如 `v1.0.0`) | memento-api.oddlabcc.cc | `deploy.yml` |
-| **Beta** | Tag `v*b*` (如 `v1.0.0b1`) | beta.memento-api.oddlabcc.cc | `deploy.yml` |
-| **Dev** | 本地開發 | localhost:8787 | 手動執行 |
+| 環境           | 觸發方式                   | 網域                       | Workflow     |
+| -------------- | -------------------------- | -------------------------- | ------------ |
+| **Production** | Tag `v*` (如 `v1.0.0`)     | memento-api.oddlab.cc      | `deploy.yml` |
+| **Beta**       | Tag `v*b*` (如 `v1.0.0b1`) | beta.memento-api.oddlab.cc | `deploy.yml` |
+| **Dev**        | 本地開發                   | localhost:8787             | 手動執行     |
 
 ---
 
@@ -42,6 +42,7 @@ CLOUDFLARE_ACCOUNT_ID     # Cloudflare Account ID (在 Workers 頁面右側)
 ```
 
 **取得 Account ID：**
+
 - 登入 Cloudflare Dashboard
 - 進入 **Workers & Pages**
 - 右側會顯示 **Account ID**
@@ -86,6 +87,7 @@ git push origin v1.0.0b1
 進入 GitHub Repository → **Actions** → **Deploy to Cloudflare Workers** → **Run workflow**
 
 選擇環境：
+
 - `beta` - 部署到 Beta 環境
 - `production` - 部署到 Production 環境
 
@@ -96,21 +98,25 @@ git push origin v1.0.0b1
 ### 1. CI - Type Check & Build (`ci.yml`)
 
 **觸發時機：**
+
 - Pull Request 到 `main` 或 `beta` branch
 - Push 到 `main` 或 `beta` branch
 
 **執行內容：**
+
 - TypeScript 型別檢查
 - Wrangler 建置驗證
 
 ### 2. Deploy (`deploy.yml`)
 
 **觸發時機：**
+
 - Push tag `v*` (Production)
 - Push tag `v*b*` (Beta)
 - 手動觸發
 
 **執行內容：**
+
 - 安裝依賴
 - TypeScript 型別檢查
 - 根據 tag pattern 自動選擇環境
@@ -185,10 +191,12 @@ pnpm build
 ### 部署失敗
 
 1. **檢查 Secrets**
+
    - 確認 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID` 正確
    - Token 權限是否足夠
 
 2. **檢查 wrangler.toml**
+
    - KV Namespace ID 是否正確
    - Durable Objects 配置是否正確
    - Routes 設定是否正確

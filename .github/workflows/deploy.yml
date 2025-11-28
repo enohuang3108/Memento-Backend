@@ -3,14 +3,14 @@ name: Deploy to Cloudflare Workers
 on:
   push:
     tags:
-      - 'v*'       # Production: v1.0.0, v1.2.3
-      - 'v*b*'     # Beta: v1.0.0b1, v1.2.3b2
+      - "v*" # Production: v1.0.0, v1.2.3
+      - "v*b*" # Beta: v1.0.0b1, v1.2.3b2
 
   # Allow manual trigger for testing
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy'
+        description: "Environment to deploy"
         required: true
         type: choice
         options:
@@ -34,8 +34,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: "20"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -76,7 +76,7 @@ jobs:
           echo "**Tag:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           if [[ "${{ steps.env.outputs.environment }}" == "beta" ]]; then
-            echo "**URL:** https://beta.memento-api.oddlabcc.cc" >> $GITHUB_STEP_SUMMARY
+            echo "**URL:** https://beta.memento-api.oddlab.cc" >> $GITHUB_STEP_SUMMARY
           else
-            echo "**URL:** https://memento-api.oddlabcc.cc" >> $GITHUB_STEP_SUMMARY
+            echo "**URL:** https://memento-api.oddlab.cc" >> $GITHUB_STEP_SUMMARY
           fi

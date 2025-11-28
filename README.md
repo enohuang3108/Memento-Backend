@@ -146,11 +146,11 @@ pnpm deploy:production
 
 ## 🌍 環境配置
 
-| 環境 | 名稱 | 網域 |
-|------|------|------|
-| Development | `memento-api-dev` | localhost:8787 |
-| Beta | `memento-api-beta` | beta.memento-api.oddlabcc.cc |
-| Production | `memento-api-production` | memento-api.oddlabcc.cc |
+| 環境        | 名稱                     | 網域                       |
+| ----------- | ------------------------ | -------------------------- |
+| Development | `memento-api-dev`        | localhost:8787             |
+| Beta        | `memento-api-beta`       | beta.memento-api.oddlab.cc |
+| Production  | `memento-api-production` | memento-api.oddlab.cc      |
 
 ## 📝 開發規範
 
