@@ -85,11 +85,11 @@ export default {
     if (wsMatch && request.headers.get('Upgrade') === 'websocket') {
       const activityId = wsMatch[1]
 
-      // Check Origin for WebSocket connections
-      const origin = request.headers.get('Origin')
-      const allowedOrigins = env.CORS_ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000']
+      // Check Origin for WebSocket connections using the same logic as HTTP requests
+      const origin = request.headers.get('Origin') || ''
+      const allowedOrigin = getAllowedOrigin(request, env)
 
-      if (origin && !allowedOrigins.includes(origin)) {
+      if (origin && allowedOrigin === '*') {
         return new Response('Origin not allowed', { status: 403, headers: corsHeaders })
       }
 
@@ -111,15 +111,30 @@ export default {
 
 function getAllowedOrigin(request: Request, env: Env): string {
   const origin = request.headers.get('Origin') || ''
-  const allowedOrigins = env.CORS_ALLOWED_ORIGINS?.split(',') || [
+  const allowedOrigins = env.CORS_ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [
     'http://localhost:3000',
   ]
 
+  // Check for exact match first
   if (allowedOrigins.includes(origin)) {
     return origin
   }
 
-  return allowedOrigins[0]
+  // Check for regex pattern match (for wildcard domains)
+  if (env.CORS_ALLOWED_PATTERN) {
+    try {
+      const pattern = new RegExp(env.CORS_ALLOWED_PATTERN)
+      if (pattern.test(origin)) {
+        return origin
+      }
+    } catch (error) {
+      console.error('Invalid CORS_ALLOWED_PATTERN:', error)
+    }
+  }
+
+  // If no origin header or not allowed, return '*' for public endpoints
+  // This allows the request to go through but without credentials
+  return '*'
 }
 
 function addCorsHeaders(response: Response, corsHeaders: Record<string, string>): Response {

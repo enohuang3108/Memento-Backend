@@ -14,11 +14,15 @@ Access-Control-Max-Age: 86400 (24 小時)
 
 ### 允許的來源（依環境）
 
-| 環境 | 允許的 Origins |
-|------|---------------|
-| **Development** | `http://localhost:3000`, `http://127.0.0.1:3000` |
-| **Beta** | `https://beta.memento.oddlabcc.cc`, `http://localhost:3000` |
-| **Production** | `https://memento.oddlabcc.cc` |
+| 環境 | 允許的 Origins | Pattern (Regex) |
+|------|---------------|-----------------|
+| **Development** | `http://localhost:3000`, `http://127.0.0.1:3000` | - |
+| **Beta** | `https://memento.oddlab.cc`, `http://localhost:3000` | `^https://.*-memento\\.oddlabcc\\.workers\\.dev$` |
+| **Production** | `https://memento.oddlab.cc` | - |
+
+**Beta 環境說明：**
+- 精確匹配：正式網域 + localhost
+- Pattern 匹配：支援 Cloudflare Workers 的動態部署網域（例如：`https://branch-name-memento.oddlabcc.workers.dev`）
 
 ---
 
@@ -94,33 +98,44 @@ Worker 會：
 
 ### 修改 wrangler.toml
 
+支援兩種方式配置 CORS：
+1. **精確匹配** - 使用 `CORS_ALLOWED_ORIGINS`（逗號分隔）
+2. **Regex Pattern** - 使用 `CORS_ALLOWED_PATTERN`（支援 wildcard domains）
+
 ```toml
 # Development
 [env.dev]
-vars = {
-  CORS_ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"
-}
+vars = { CORS_ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000" }
 
-# Beta
+# Beta - 支援動態部署網域
 [env.beta]
-vars = {
-  CORS_ALLOWED_ORIGINS = "https://beta.memento.oddlabcc.cc,http://localhost:3000"
-}
+name = "memento-api-beta"
+
+[env.beta.vars]
+CORS_ALLOWED_ORIGINS = "https://memento.oddlab.cc,http://localhost:3000"
+CORS_ALLOWED_PATTERN = "^https://.*-memento\\.oddlabcc\\.workers\\.dev$"
 
 # Production
 [env.production]
-vars = {
-  CORS_ALLOWED_ORIGINS = "https://memento.oddlabcc.cc"
-}
+vars = { CORS_ALLOWED_ORIGINS = "https://memento.oddlab.cc" }
 ```
+
+**重要提醒：**
+- `CORS_ALLOWED_PATTERN` 必須是有效的 JavaScript RegExp pattern
+- Pattern 會在 Worker 程式碼中使用 `new RegExp()` 建立
+- 使用 TOML table 格式 `[env.beta.vars]` 來定義多個變數
 
 ### 本地開發（.dev.vars）
 
 ```env
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+# Optional: Add pattern for wildcard matching
+# CORS_ALLOWED_PATTERN=^https://.*-memento\\.oddlabcc\\.workers\\.dev$
 ```
 
-**注意：** 多個 origin 用逗號分隔，**不要有空格**。
+**注意：**
+- 多個 origin 用逗號分隔，**不要有空格**
+- `.dev.vars` 不支援 TOML table 格式，只能使用 `KEY=VALUE` 格式
 
 ---
 
@@ -267,11 +282,12 @@ curl -X OPTIONS https://memento-api.oddlabcc.cc/events \
 部署前確認：
 
 - [ ] `wrangler.toml` 的 `CORS_ALLOWED_ORIGINS` 正確
+- [ ] Beta 環境的 `CORS_ALLOWED_PATTERN` regex 正確（支援動態部署）
 - [ ] 包含所有需要的前端網域
 - [ ] 多個 origin 用逗號分隔（無空格）
-- [ ] Production 只允許正式網域
-- [ ] Beta 允許測試網域 + localhost
-- [ ] WebSocket Origin 檢查啟用
+- [ ] Production 只允許正式網域（無 wildcard pattern）
+- [ ] Beta 允許測試網域 + localhost + wildcard pattern
+- [ ] WebSocket Origin 檢查使用相同的 CORS 邏輯
 
 部署後測試：
 
@@ -286,10 +302,11 @@ curl -X OPTIONS https://memento-api.oddlabcc.cc/events \
 
 ### ✅ 好的做法
 
-1. **明確指定 Origins** - 不要使用 `*`
+1. **明確指定 Origins** - 使用精確匹配或 regex pattern，不要使用 `*`
 2. **使用 HTTPS** - Production 只允許 HTTPS
 3. **最小權限原則** - 只允許必要的 Headers 和 Methods
-4. **WebSocket 驗證** - 檢查 Origin
+4. **WebSocket 驗證** - 使用相同的 CORS 檢查邏輯
+5. **Regex Pattern 安全** - 確保 pattern 不會過於寬鬆（例如：避免 `.*` 匹配任意字元）
 
 ### ❌ 避免的做法
 
@@ -298,10 +315,45 @@ curl -X OPTIONS https://memento-api.oddlabcc.cc/events \
 'Access-Control-Allow-Origin': '*'
 'Access-Control-Allow-Headers': '*'
 
+// ❌ 危險的 regex pattern
+CORS_ALLOWED_PATTERN = "^https://.*$"  // 太寬鬆！
+
 // ✅ 應該這樣做
 'Access-Control-Allow-Origin': getAllowedOrigin(request, env)
 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+
+// ✅ 安全的 regex pattern
+CORS_ALLOWED_PATTERN = "^https://.*-memento\\.oddlabcc\\.workers\\.dev$"
 ```
+
+### 🔍 實作說明
+
+Worker 程式碼中的 CORS 檢查流程：
+
+```typescript
+function getAllowedOrigin(request: Request, env: Env): string {
+  const origin = request.headers.get('Origin') || ''
+
+  // 1. 檢查精確匹配
+  const allowedOrigins = env.CORS_ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || []
+  if (allowedOrigins.includes(origin)) {
+    return origin
+  }
+
+  // 2. 檢查 regex pattern 匹配
+  if (env.CORS_ALLOWED_PATTERN) {
+    const pattern = new RegExp(env.CORS_ALLOWED_PATTERN)
+    if (pattern.test(origin)) {
+      return origin
+    }
+  }
+
+  // 3. 不匹配則返回 '*'（不帶 credentials）
+  return '*'
+}
+```
+
+詳見：[src/index.ts](../src/index.ts:112-138)
 
 ---
 
