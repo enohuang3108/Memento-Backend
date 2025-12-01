@@ -14,11 +14,11 @@ Access-Control-Max-Age: 86400 (24 小時)
 
 ### 允許的來源（依環境）
 
-| 環境            | 允許的 Origins                                       | Pattern (Regex)                                   |
-| --------------- | ---------------------------------------------------- | ------------------------------------------------- |
-| **Development** | `http://localhost:3000`, `http://127.0.0.1:3000`     | -                                                 |
-| **Beta**        | `https://memento.oddlab.cc`, `http://localhost:3000` | `^https://.*-memento\\.oddlabcc\\.workers\\.dev$` |
-| **Production**  | `https://memento.oddlab.cc`                          | -                                                 |
+| 環境            | 允許的 Origins                                            | Pattern (Regex)                                |
+| --------------- | --------------------------------------------------------- | ---------------------------------------------- |
+| **Development** | `http://localhost:3000`, `http://127.0.0.1:3000`          | -                                              |
+| **Beta**        | `https://beta.memento.oddlab.cc`, `http://localhost:3000` | `^https://.*-memento.*\\.workers\\.dev$`       |
+| **Production**  | `https://memento.oddlab.cc`                               | -                                              |
 
 **Beta 環境說明：**
 
