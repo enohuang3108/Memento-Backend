@@ -16,12 +16,17 @@ export default {
     const url = new URL(request.url)
 
     // CORS headers
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': getAllowedOrigin(request, env),
+    // CORS headers
+    const allowedOrigin = getAllowedOrigin(request, env)
+    const corsHeaders: Record<string, string> = {
+      'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-      'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Max-Age': '86400',
+    }
+
+    if (allowedOrigin !== '*') {
+      corsHeaders['Access-Control-Allow-Credentials'] = 'true'
     }
 
     // Handle preflight
