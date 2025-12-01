@@ -100,7 +100,7 @@ export interface ApiError {
 export interface Env {
   EVENT_ROOM: DurableObjectNamespace
   CORS_ALLOWED_ORIGINS?: string
-  CORS_ALLOWED_PATTERN?: string
+
   // Google OAuth 2.0 credentials
   GOOGLE_CLIENT_ID: string
   GOOGLE_CLIENT_SECRET: string

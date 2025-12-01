@@ -120,17 +120,7 @@ function getAllowedOrigin(request: Request, env: Env): string {
     return origin
   }
 
-  // Check for regex pattern match (for wildcard domains)
-  if (env.CORS_ALLOWED_PATTERN) {
-    try {
-      const pattern = new RegExp(env.CORS_ALLOWED_PATTERN)
-      if (pattern.test(origin)) {
-        return origin
-      }
-    } catch (error) {
-      console.error('Invalid CORS_ALLOWED_PATTERN:', error)
-    }
-  }
+
 
   // If no origin header or not allowed, return '*' for public endpoints
   // This allows the request to go through but without credentials
