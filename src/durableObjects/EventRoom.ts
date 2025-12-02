@@ -1,12 +1,12 @@
 import { getSystemAccessToken } from '../services/systemTokenManager'
 import type {
-    Event as ActivityEvent,
-    ClientMessage,
-    DurableObjectState,
-    Env,
-    ParticipantSession,
-    Photo,
-    ServerMessage,
+  Event as ActivityEvent,
+  ClientMessage,
+  DurableObjectState,
+  Env,
+  ParticipantSession,
+  Photo,
+  ServerMessage,
 } from '../types'
 import { filterProfanity } from '../utils/profanityFilter'
 import { generateULID } from '../utils/ulid'
@@ -529,6 +529,7 @@ export class EventRoom {
 
   /**
    * Sync photos from Google Drive folder
+   * Supports pagination to fetch up to 2000 photos
    */
   private async syncPhotosFromDrive(): Promise<void> {
     if (!this.event || !this.event.driveFolderId) {
@@ -540,44 +541,76 @@ export class EventRoom {
       // This handles storage in KV and auto-refreshing
       const systemToken = await getSystemAccessToken(this.env)
 
-      // List files in the Drive folder
-      const driveResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files?` +
-        `q='${this.event.driveFolderId}' in parents and mimeType contains 'image/'` +
-        `&fields=files(id,name,thumbnailLink,webContentLink,webViewLink,imageMediaMetadata)` +
-        `&orderBy=createdTime desc` +
-        `&pageSize=100`,
-        {
+      const MAX_PHOTOS = 2000
+      const PAGE_SIZE = 1000 // Google Drive API max page size
+      let pageToken: string | undefined = undefined
+      let allFiles: Array<{
+        id: string
+        name: string
+        thumbnailLink?: string
+        webContentLink?: string
+        webViewLink?: string
+        imageMediaMetadata?: {
+          width?: number
+          height?: number
+        }
+      }> = []
+
+      // Fetch all pages until we hit the limit or run out of photos
+      do {
+        const url =
+          `https://www.googleapis.com/drive/v3/files?` +
+          `q='${this.event.driveFolderId}' in parents and mimeType contains 'image/'` +
+          `&fields=files(id,name,thumbnailLink,webContentLink,webViewLink,imageMediaMetadata),nextPageToken` +
+          `&orderBy=createdTime desc` +
+          `&pageSize=${PAGE_SIZE}` +
+          (pageToken ? `&pageToken=${pageToken}` : '')
+
+        const driveResponse = await fetch(url, {
           headers: {
             'Authorization': `Bearer ${systemToken}`,
           },
+        })
+
+        if (!driveResponse.ok) {
+          console.error('[EventRoom] Drive API error:', await driveResponse.text())
+          return
         }
-      )
 
-      if (!driveResponse.ok) {
-        console.error('[EventRoom] Drive API error:', await driveResponse.text())
-        return
-      }
+        const driveData = await driveResponse.json() as {
+          files: Array<{
+            id: string
+            name: string
+            thumbnailLink?: string
+            webContentLink?: string
+            webViewLink?: string
+            imageMediaMetadata?: {
+              width?: number
+              height?: number
+            }
+          }>
+          nextPageToken?: string
+        }
 
-      const driveData = await driveResponse.json() as {
-        files: Array<{
-          id: string
-          name: string
-          thumbnailLink?: string
-          webContentLink?: string
-          webViewLink?: string
-          imageMediaMetadata?: {
-            width?: number
-            height?: number
-          }
-        }>
-      }
+        allFiles.push(...driveData.files)
+        pageToken = driveData.nextPageToken
+
+        // Safety limit: stop if we've fetched enough photos
+        if (allFiles.length >= MAX_PHOTOS) {
+          console.log(`[EventRoom] Reached photo limit (${MAX_PHOTOS}), stopping pagination`)
+          allFiles = allFiles.slice(0, MAX_PHOTOS)
+          break
+        }
+
+      } while (pageToken)
+
+      console.log(`[EventRoom] Fetched ${allFiles.length} total photos from Drive`)
 
       // Convert Drive files to Photo objects
       const newPhotos: Photo[] = []
       const existingFileIds = new Set(this.photos.map(p => p.driveFileId))
 
-      for (const file of driveData.files) {
+      for (const file of allFiles) {
         // Skip if already exists
         if (existingFileIds.has(file.id)) {
           continue
@@ -585,11 +618,11 @@ export class EventRoom {
 
         // Create Photo object with correct Google Drive URLs
           // thumbnailLink: Direct thumbnail from Drive API (size=s220 by default)
-          // fullUrl: Use high-res thumbnail link (=s0) for reliable embedding, fallback to webContentLink
-          // Note: webContentLink (uc?export=view) often fails due to third-party cookie blocking
+          // fullUrl: Use high-res thumbnail link (=s0) for reliable embedding
+          // Note: uc URLs are blocked by CORS/OpaqueResponseBlocking, use thumbnail API instead
           const fullUrl = file.thumbnailLink
             ? file.thumbnailLink.replace(/=s\d+$/, '=s0')
-            : `https://drive.google.com/uc?export=view&id=${file.id}`
+            : `https://drive.google.com/thumbnail?id=${file.id}&sz=s0`
 
           const photo: Photo = {
             id: generateULID(),
@@ -612,7 +645,7 @@ export class EventRoom {
 
       // Broadcast new photos to all connected clients
       if (newPhotos.length > 0) {
-        console.log(`[EventRoom] Synced ${newPhotos.length} new photos from Drive`)
+        console.log(`[EventRoom] Synced ${newPhotos.length} new photos from Drive (total: ${this.photos.length})`)
 
         for (const photo of newPhotos) {
           await this.broadcast({

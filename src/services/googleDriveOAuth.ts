@@ -133,7 +133,7 @@ export async function uploadToGoogleDriveOAuth(
 
   // Step 1: Upload file
   const metadata = {
-    name: `photo_${Date.now()}_${fileName}`,
+    name: `${Date.now()}`,
     mimeType,
     parents: [folderId],
   }
@@ -223,7 +223,11 @@ export async function uploadToGoogleDriveOAuth(
   return {
     driveFileId: fileId,
     thumbnailUrl: fileInfo.thumbnailLink || `https://drive.google.com/thumbnail?id=${fileId}`,
-    fullUrl: fileInfo.webContentLink || `https://drive.google.com/uc?id=${fileId}`,
+    // Use thumbnailLink with =s0 for full size, as it supports CORS
+    // webContentLink and uc URLs are blocked by CORS/OpaqueResponseBlocking
+    fullUrl: fileInfo.thumbnailLink
+      ? fileInfo.thumbnailLink.replace(/=s\d+$/, '=s0')
+      : `https://drive.google.com/thumbnail?id=${fileId}&sz=s0`,
   }
 }
 
