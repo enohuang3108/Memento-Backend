@@ -40,13 +40,15 @@ export interface ParticipantSession {
 
 // WebSocket message types
 export type ClientMessage =
+  | { type: 'join'; sessionId: string; role: 'participant' | 'display' }
   | { type: 'photo_added'; driveFileId: string; thumbnailUrl: string; fullUrl: string; width?: number; height?: number }
   | { type: 'danmaku'; content: string }
   | { type: 'ping' }
 
 export type ServerMessage =
-  | { type: 'joined'; activityId: string; photos: Photo[]; timestamp: number }
+  | { type: 'joined'; activityId: string; photos: Photo[]; timestamp: number; playlist?: Photo[]; currentIndex?: number }
   | { type: 'photo_added'; photo: Photo }
+  | { type: 'play_photo'; photo: Photo; index: number; total: number; timestamp: number }
   | { type: 'danmaku'; id: string; content: string; sessionId: string; timestamp: number }
   | { type: 'activity_ended'; activityId: string; reason: string; timestamp: number }
   | { type: 'pong'; timestamp: number }
