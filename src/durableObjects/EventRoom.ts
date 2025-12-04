@@ -33,10 +33,13 @@ export class EventRoom {
   private sessions: Map<string, WebSocket> = new Map() // sessionId -> WebSocket
   private sessionMetadata: Map<string, ParticipantSession> = new Map()
   private rateLimitState: Map<string, RateLimitState> = new Map()
+  private wsToSessionId: Map<WebSocket, string> = new Map() // WebSocket -> sessionId mapping
   private env: Env
   private syncInterval: number | null = null
+  private state: DurableObjectState<Record<string, never>>
 
-  constructor(_state: DurableObjectState<Record<string, never>>, env: Env) {
+  constructor(state: DurableObjectState<Record<string, never>>, env: Env) {
+    this.state = state
     this.env = env
     // Start syncing photos from Google Drive every 10 seconds
     this.startPhotoSync()
@@ -112,7 +115,12 @@ export class EventRoom {
   /**
    * Get current event state
    */
-  private handleGetEvent(): Response {
+  private async handleGetEvent(): Promise<Response> {
+    // Auto-restart if event is null
+    if (!this.event) {
+      await this.autoRestartEvent()
+    }
+
     if (!this.event) {
       return new Response(
         JSON.stringify({ error: 'Event not found' }),
@@ -161,6 +169,7 @@ export class EventRoom {
     this.sessions.clear()
     this.sessionMetadata.clear()
     this.rateLimitState.clear()
+    this.wsToSessionId.clear()
 
     return new Response(
       JSON.stringify({ success: true, event: this.event }),
@@ -171,9 +180,22 @@ export class EventRoom {
   /**
    * Handle WebSocket upgrade
    */
-  private handleWebSocketUpgrade(_request: Request): Response {
-    if (!this.event || this.event.status !== 'active') {
-      return new Response('Event not active', { status: 404 })
+  private async handleWebSocketUpgrade(_request: Request): Promise<Response> {
+    // Auto-restart if event is null (DO was evicted)
+    if (!this.event) {
+      await this.autoRestartEvent()
+    }
+
+    if (!this.event) {
+      return new Response('Event not found', { status: 404 })
+    }
+
+    // Auto-restart ended events when reconnecting
+    if (this.event.status === 'ended') {
+      console.log(`[EventRoom] Auto-restarting ended event: ${this.event.id}`)
+      this.event.status = 'active'
+      // Extend expiration time by 24 hours
+      this.event.expiresAt = Date.now() + 24 * 60 * 60 * 1000
     }
 
     // Check connection limit (max 500 per DO)
@@ -192,6 +214,7 @@ export class EventRoom {
     // Store temporarily until we get session ID from client
     const tempId = generateULID()
     this.sessions.set(tempId, server)
+    this.wsToSessionId.set(server, tempId) // Track WebSocket -> sessionId mapping
 
     // Setup message handlers
     server.addEventListener('message', async (event: MessageEvent) => {
@@ -206,6 +229,7 @@ export class EventRoom {
           if (this.sessions.has(tempId)) {
             this.sessions.delete(tempId)
             this.sessions.set(sessionId, server)
+            this.wsToSessionId.set(server, sessionId) // Update WebSocket -> sessionId mapping
 
             // Create session metadata
             this.sessionMetadata.set(sessionId, {
@@ -249,14 +273,20 @@ export class EventRoom {
     })
 
     server.addEventListener('close', () => {
-      // Remove session
-      this.sessions.delete(tempId)
-      this.sessionMetadata.delete(tempId)
-      this.rateLimitState.delete(tempId)
+      // Get the actual sessionId for this WebSocket
+      const actualSessionId = this.wsToSessionId.get(server)
 
-      // Update participant count
-      if (this.event) {
-        this.event.participantCount = this.sessionMetadata.size
+      if (actualSessionId) {
+        // Remove session using the actual sessionId
+        this.sessions.delete(actualSessionId)
+        this.sessionMetadata.delete(actualSessionId)
+        this.rateLimitState.delete(actualSessionId)
+        this.wsToSessionId.delete(server)
+
+        // Update participant count
+        if (this.event) {
+          this.event.participantCount = this.sessionMetadata.size
+        }
       }
     })
 
@@ -657,6 +687,42 @@ export class EventRoom {
 
     } catch (error) {
       console.error('[EventRoom] Error syncing photos from Drive:', error)
+    }
+  }
+
+  /**
+   * Auto-restart event from Durable Object name (which is the driveFolderId)
+   */
+  private async autoRestartEvent(): Promise<void> {
+    try {
+      // Get the driveFolderId from DO's name
+      // Note: state.id.name is a synchronous property
+      const driveFolderId = this.state.id.name
+
+      console.log(`[EventRoom] Attempting auto-restart, DO name: "${driveFolderId}"`)
+
+      if (!driveFolderId) {
+        console.error('[EventRoom] Cannot auto-restart: no DO name found')
+        return
+      }
+
+      console.log(`[EventRoom] Auto-restarting event from driveFolderId: ${driveFolderId}`)
+
+      // Reinitialize the event
+      this.event = {
+        id: driveFolderId, // Use driveFolderId as activity ID for now
+        title: undefined,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+        status: 'active',
+        driveFolderId: driveFolderId,
+        photoCount: 0,
+        participantCount: 0,
+      }
+
+      console.log(`[EventRoom] Event auto-restarted successfully: ${this.event.id}`)
+    } catch (error) {
+      console.error('[EventRoom] Failed to auto-restart event:', error)
     }
   }
 }

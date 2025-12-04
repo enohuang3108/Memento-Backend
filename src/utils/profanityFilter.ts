@@ -10,9 +10,11 @@ const BLACKLIST = new Set([
   '白癡',
   '笨蛋',
   '垃圾',
+  '媽的',
   'fuck',
   'shit',
   'damn',
+  '87',
 ])
 
 /**
@@ -22,13 +24,13 @@ const BLACKLIST = new Set([
  */
 export function containsProfanity(content: string): boolean {
   const normalized = content.toLowerCase().trim()
-  
+
   for (const word of BLACKLIST) {
     if (normalized.includes(word.toLowerCase())) {
       return true
     }
   }
-  
+
   return false
 }
 
@@ -65,15 +67,15 @@ export function validateDanmaku(content: string): {
   if (content.length === 0) {
     return { valid: false, error: '彈幕內容不可為空' }
   }
-  
+
   if (content.length > 50) {
     return { valid: false, error: '彈幕長度不可超過 50 字元' }
   }
-  
+
   // Profanity check
   if (containsProfanity(content)) {
     return { valid: false, error: '彈幕包含不當內容，請修改後重試' }
   }
-  
+
   return { valid: true }
 }
