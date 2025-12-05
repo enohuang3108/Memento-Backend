@@ -11,14 +11,12 @@ import type {
 import { filterProfanity } from '../utils/profanityFilter'
 import { generateULID } from '../utils/ulid'
 import { validateDanmakuContent, validatePhotoUpload } from '../utils/validation'
-
-/**
- * Rate limiter state for a session
- */
-interface RateLimitState {
-  photoUploads: number[] // timestamps of recent uploads (keep last 60s)
-  danmakuSends: number[] // timestamps of recent danmaku (keep last 10s)
-}
+import {
+  checkRateLimit as checkRateLimitUtil,
+  createRateLimitState,
+  recordAction as recordActionUtil,
+  type RateLimitState,
+} from '../utils/rateLimiter'
 
 /**
  * EventRoom Durable Object
@@ -250,10 +248,7 @@ export class EventRoom {
             })
 
             // Initialize rate limit state
-            this.rateLimitState.set(sessionId, {
-              photoUploads: [],
-              danmakuSends: [],
-            })
+            this.rateLimitState.set(sessionId, createRateLimitState())
 
             // Update participant count
             this.event!.participantCount = this.sessionMetadata.size
@@ -302,10 +297,7 @@ export class EventRoom {
               isActive: true,
             })
 
-            this.rateLimitState.set(sessionId, {
-              photoUploads: [],
-              danmakuSends: [],
-            })
+            this.rateLimitState.set(sessionId, createRateLimitState())
 
             this.event!.participantCount = this.sessionMetadata.size
 
@@ -426,15 +418,18 @@ export class EventRoom {
     }
 
     // Check rate limit (20 photos / 60 seconds)
-    const rateLimitCheck = this.checkRateLimit(sessionId, 'photo')
-    if (!rateLimitCheck.allowed) {
-      ws.send(JSON.stringify({
-        type: 'error',
-        code: 'RATE_LIMIT_EXCEEDED',
-        message: 'Too many photo uploads. Please wait.',
-        retryAfter: rateLimitCheck.retryAfter,
-      } as ServerMessage))
-      return
+    const state = this.rateLimitState.get(sessionId)
+    if (state) {
+      const rateLimitCheck = checkRateLimitUtil(state, 'photo')
+      if (!rateLimitCheck.allowed) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: 'Too many photo uploads. Please wait.',
+          retryAfter: rateLimitCheck.retryAfter,
+        } as ServerMessage))
+        return
+      }
     }
 
     // Create photo object
@@ -455,13 +450,24 @@ export class EventRoom {
     this.event!.photoCount = this.photos.length
 
     // Record upload timestamp for rate limiting
-    this.recordAction(sessionId, 'photo')
+    if (state) {
+      const newState = recordActionUtil(state, 'photo')
+      this.rateLimitState.set(sessionId, newState)
+    }
+
+    // Add to playlist for synchronized playback
+    this.addToPlaylist(photo)
 
     // Broadcast to all connected clients
     await this.broadcast({
       type: 'photo_added',
       photo,
     })
+
+    // Start playback if not already started and there are Display clients
+    if (this.playbackTimer === null && this.hasDisplayClients()) {
+      this.startPlayback()
+    }
   }
 
   /**
@@ -495,19 +501,25 @@ export class EventRoom {
     }
 
     // Check rate limit (1 danmaku / 2 seconds)
-    const rateLimitCheck = this.checkRateLimit(sessionId, 'danmaku')
-    if (!rateLimitCheck.allowed) {
-      ws.send(JSON.stringify({
-        type: 'error',
-        code: 'RATE_LIMIT_EXCEEDED',
-        message: 'Please wait before sending another message',
-        retryAfter: rateLimitCheck.retryAfter,
-      } as ServerMessage))
-      return
+    const state = this.rateLimitState.get(sessionId)
+    if (state) {
+      const rateLimitCheck = checkRateLimitUtil(state, 'danmaku')
+      if (!rateLimitCheck.allowed) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: 'Please wait before sending another message',
+          retryAfter: rateLimitCheck.retryAfter,
+        } as ServerMessage))
+        return
+      }
     }
 
     // Record send timestamp for rate limiting
-    this.recordAction(sessionId, 'danmaku')
+    if (state) {
+      const newState = recordActionUtil(state, 'danmaku')
+      this.rateLimitState.set(sessionId, newState)
+    }
 
     // Broadcast danmaku (NO STORAGE - ephemeral only)
     await this.broadcast({
@@ -519,64 +531,6 @@ export class EventRoom {
     })
   }
 
-  /**
-   * Check rate limit for a session
-   */
-  private checkRateLimit(
-    sessionId: string,
-    type: 'photo' | 'danmaku'
-  ): { allowed: boolean; retryAfter?: number } {
-    const state = this.rateLimitState.get(sessionId)
-    if (!state) {
-      return { allowed: true }
-    }
-
-    const now = Date.now()
-
-    if (type === 'photo') {
-      // 20 uploads / 60 seconds
-      const recentUploads = state.photoUploads.filter(t => now - t < 60000)
-      if (recentUploads.length >= 20) {
-        const oldestUpload = Math.min(...recentUploads)
-        return {
-          allowed: false,
-          retryAfter: 60000 - (now - oldestUpload),
-        }
-      }
-    } else {
-      // 1 danmaku / 2 seconds
-      const recentSends = state.danmakuSends.filter(t => now - t < 2000)
-      if (recentSends.length >= 1) {
-        const lastSend = Math.max(...recentSends)
-        return {
-          allowed: false,
-          retryAfter: 2000 - (now - lastSend),
-        }
-      }
-    }
-
-    return { allowed: true }
-  }
-
-  /**
-   * Record an action for rate limiting
-   */
-  private recordAction(sessionId: string, type: 'photo' | 'danmaku'): void {
-    const state = this.rateLimitState.get(sessionId)
-    if (!state) return
-
-    const now = Date.now()
-
-    if (type === 'photo') {
-      // Keep only last 60 seconds
-      state.photoUploads = state.photoUploads.filter(t => now - t < 60000)
-      state.photoUploads.push(now)
-    } else {
-      // Keep only last 10 seconds
-      state.danmakuSends = state.danmakuSends.filter(t => now - t < 10000)
-      state.danmakuSends.push(now)
-    }
-  }
 
   /**
    * Broadcast message to all connected clients
