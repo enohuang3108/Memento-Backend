@@ -118,6 +118,26 @@ export async function handlePhotoUpload(request: Request, env: Env): Promise<Res
       height,
     }
 
+    // Notify Durable Object immediately for instant display (reduces 10s delay)
+    try {
+      await stub.fetch(
+        new Request('http://internal/notify-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            driveFileId: result.driveFileId,
+            thumbnailUrl: result.thumbnailUrl,
+            fullUrl: result.fullUrl,
+            width,
+            height,
+          }),
+        })
+      )
+    } catch (notifyError) {
+      // Log but don't fail the upload - photo will be picked up by polling
+      console.error('Failed to notify DO of new photo:', notifyError)
+    }
+
     return new Response(JSON.stringify(response), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

@@ -28,6 +28,7 @@ export class EventRoom {
   // In-memory state
   private event: ActivityEvent | null = null
   private photos: Photo[] = []
+  private driveFileIdSet: Set<string> = new Set() // O(1) duplicate detection
   private sessions: Map<string, WebSocket> = new Map() // sessionId -> WebSocket
   private sessionMetadata: Map<string, ParticipantSession> = new Map()
   private rateLimitState: Map<string, RateLimitState> = new Map()
@@ -72,6 +73,16 @@ export class EventRoom {
       return this.handleEndEvent()
     }
 
+    // Notify new photo uploaded (POST /notify-photo)
+    if (url.pathname === '/notify-photo' && request.method === 'POST') {
+      return this.handleNotifyPhoto(request)
+    }
+
+    // Verify display password (POST /verify-display-password)
+    if (url.pathname === '/verify-display-password' && request.method === 'POST') {
+      return this.handleVerifyDisplayPassword(request)
+    }
+
     return new Response('Not found', { status: 404 })
   }
 
@@ -90,6 +101,7 @@ export class EventRoom {
       id: string
       title?: string
       driveFolderId?: string
+      displayPassword?: string
     }
 
     if (!body.driveFolderId) {
@@ -106,6 +118,7 @@ export class EventRoom {
       expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
       status: 'active',
       driveFolderId: body.driveFolderId,
+      displayPassword: body.displayPassword,
       photoCount: 0,
       participantCount: 0,
     }
@@ -158,11 +171,12 @@ export class EventRoom {
 
     this.event.status = 'ended'
 
-    // Stop playlist playback
+    // Stop playlist playback and photo sync
     this.stopPlayback()
+    this.stopPhotoSync()
 
     // Broadcast to all connected clients
-    await this.broadcast({
+    this.broadcast({
       type: 'activity_ended',
       activityId: this.event.id,
       reason: 'Host ended the event',
@@ -182,6 +196,110 @@ export class EventRoom {
       JSON.stringify({ success: true, event: this.event }),
       { headers: { 'Content-Type': 'application/json' } }
     )
+  }
+
+  /**
+   * Handle instant photo notification from upload handler
+   * This reduces the 10-second polling delay to near-instant display
+   */
+  private async handleNotifyPhoto(request: Request): Promise<Response> {
+    if (!this.event || this.event.status !== 'active') {
+      return new Response(
+        JSON.stringify({ error: 'Event not active' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const body = await request.json() as {
+      driveFileId: string
+      thumbnailUrl: string
+      fullUrl: string
+      width?: number
+      height?: number
+    }
+
+    // Check if photo already exists
+    if (this.driveFileIdSet.has(body.driveFileId)) {
+      return new Response(
+        JSON.stringify({ success: true, duplicate: true }),
+        { headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Create photo object
+    const photo: Photo = {
+      id: generateULID(),
+      activityId: this.event.id,
+      sessionId: 'upload', // Uploaded via HTTP endpoint
+      driveFileId: body.driveFileId,
+      thumbnailUrl: body.thumbnailUrl,
+      fullUrl: body.fullUrl,
+      uploadedAt: Date.now(),
+      width: body.width,
+      height: body.height,
+    }
+
+    // Add to photos array and tracking set
+    this.photos.push(photo)
+    this.driveFileIdSet.add(photo.driveFileId)
+    this.event.photoCount = this.photos.length
+
+    // Add to playlist
+    this.addToPlaylist(photo)
+
+    // Broadcast to Display clients
+    this.broadcastToDisplays({
+      type: 'photo_added',
+      photo,
+    })
+
+    // Start playback if not already started and there are Display clients
+    if (this.playbackTimer === null && this.hasDisplayClients()) {
+      this.startPlayback()
+    }
+
+    console.log(`[EventRoom] Instant photo notification: ${photo.driveFileId} (total: ${this.photos.length})`)
+
+    return new Response(
+      JSON.stringify({ success: true, photo }),
+      { headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  /**
+   * Verify display password for Display access control
+   */
+  private async handleVerifyDisplayPassword(request: Request): Promise<Response> {
+    if (!this.event) {
+      return new Response(
+        JSON.stringify({ valid: false, error: 'Event not found' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    try {
+      const body = await request.json() as { password?: string }
+      const password = body.password?.trim()
+
+      if (!password) {
+        return new Response(
+          JSON.stringify({ valid: false, error: 'Password is required' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const valid = password === this.event.displayPassword
+
+      return new Response(
+        JSON.stringify({ valid }),
+        { headers: { 'Content-Type': 'application/json' } }
+      )
+    } catch {
+      return new Response(
+        JSON.stringify({ valid: false, error: 'Invalid request' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
   }
 
   /**
@@ -207,7 +325,15 @@ export class EventRoom {
 
     // Check connection limit (max 500 per DO)
     if (this.sessions.size >= 500) {
+      console.error(`[EventRoom] Connection limit reached: ${this.sessions.size}/500`)
       return new Response('Too many connections', { status: 503 })
+    }
+
+    // Connection count monitoring - warn when approaching limit
+    if (this.sessions.size >= 450) {
+      console.warn(`[EventRoom] Connection count approaching limit: ${this.sessions.size}/500`)
+    } else if (this.sessions.size >= 400 && this.sessions.size % 50 === 0) {
+      console.log(`[EventRoom] Connection count: ${this.sessions.size}/500`)
     }
 
     // Create WebSocket pair
@@ -445,8 +571,9 @@ export class EventRoom {
       height: message.height,
     }
 
-    // Add to photos array
+    // Add to photos array and tracking set
     this.photos.push(photo)
+    this.driveFileIdSet.add(photo.driveFileId)
     this.event!.photoCount = this.photos.length
 
     // Record upload timestamp for rate limiting
@@ -458,8 +585,8 @@ export class EventRoom {
     // Add to playlist for synchronized playback
     this.addToPlaylist(photo)
 
-    // Broadcast to all connected clients
-    await this.broadcast({
+    // Broadcast to Display clients only (reduces 99%+ broadcast volume)
+    this.broadcastToDisplays({
       type: 'photo_added',
       photo,
     })
@@ -522,7 +649,7 @@ export class EventRoom {
     }
 
     // Broadcast danmaku (NO STORAGE - ephemeral only)
-    await this.broadcast({
+    this.broadcast({
       type: 'danmaku',
       id: generateULID(),
       content: message.content,
@@ -535,22 +662,27 @@ export class EventRoom {
   /**
    * Broadcast message to all connected clients
    */
-  private async broadcast(message: ServerMessage): Promise<void> {
+  private broadcast(message: ServerMessage): void {
     const data = JSON.stringify(message)
-    const promises: Promise<void>[] = []
-
     for (const ws of this.sessions.values()) {
       if (ws.readyState === 1) { // 1 = OPEN
-        promises.push(
-          new Promise<void>((resolve) => {
-            ws.send(data)
-            resolve()
-          })
-        )
+        ws.send(data)
       }
     }
+  }
 
-    await Promise.all(promises)
+  /**
+   * Broadcast message only to Display clients
+   * This significantly reduces broadcast volume (99%+ reduction for photo messages)
+   */
+  private broadcastToDisplays(message: ServerMessage): void {
+    const data = JSON.stringify(message)
+    for (const [sessionId, ws] of this.sessions) {
+      const meta = this.sessionMetadata.get(sessionId)
+      if (meta?.role === 'display' && ws.readyState === 1) {
+        ws.send(data)
+      }
+    }
   }
 
   /**
@@ -568,6 +700,17 @@ export class EventRoom {
         console.error('[EventRoom] Photo sync failed:', err)
       })
     }, 10000) as unknown as number
+  }
+
+  /**
+   * Stop periodic photo sync from Google Drive
+   */
+  private stopPhotoSync(): void {
+    if (this.syncInterval !== null) {
+      clearInterval(this.syncInterval)
+      this.syncInterval = null
+      console.log('[EventRoom] Stopped photo sync')
+    }
   }
 
   /**
@@ -651,36 +794,36 @@ export class EventRoom {
 
       // Convert Drive files to Photo objects
       const newPhotos: Photo[] = []
-      const existingFileIds = new Set(this.photos.map(p => p.driveFileId))
 
       for (const file of allFiles) {
-        // Skip if already exists
-        if (existingFileIds.has(file.id)) {
+        // Skip if already exists (O(1) lookup using maintained Set)
+        if (this.driveFileIdSet.has(file.id)) {
           continue
         }
 
         // Create Photo object with correct Google Drive URLs
-          // thumbnailLink: Direct thumbnail from Drive API (size=s220 by default)
-          // fullUrl: Use high-res thumbnail link (=s0) for reliable embedding
-          // Note: uc URLs are blocked by CORS/OpaqueResponseBlocking, use thumbnail API instead
-          const fullUrl = file.thumbnailLink
-            ? file.thumbnailLink.replace(/=s\d+$/, '=s0')
-            : `https://drive.google.com/thumbnail?id=${file.id}&sz=s0`
+        // thumbnailLink: Direct thumbnail from Drive API (size=s220 by default)
+        // fullUrl: Use high-res thumbnail link (=s0) for reliable embedding
+        // Note: uc URLs are blocked by CORS/OpaqueResponseBlocking, use thumbnail API instead
+        const fullUrl = file.thumbnailLink
+          ? file.thumbnailLink.replace(/=s\d+$/, '=s0')
+          : `https://drive.google.com/thumbnail?id=${file.id}&sz=s0`
 
-          const photo: Photo = {
-            id: generateULID(),
-            activityId: this.event.id,
-            sessionId: 'system', // System-synced photos
-            driveFileId: file.id,
-            thumbnailUrl: file.thumbnailLink || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`,
-            fullUrl,
-            uploadedAt: Date.now(),
-            width: file.imageMediaMetadata?.width,
-            height: file.imageMediaMetadata?.height,
-          }
+        const photo: Photo = {
+          id: generateULID(),
+          activityId: this.event.id,
+          sessionId: 'system', // System-synced photos
+          driveFileId: file.id,
+          thumbnailUrl: file.thumbnailLink || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`,
+          fullUrl,
+          uploadedAt: Date.now(),
+          width: file.imageMediaMetadata?.width,
+          height: file.imageMediaMetadata?.height,
+        }
 
         newPhotos.push(photo)
         this.photos.push(photo)
+        this.driveFileIdSet.add(file.id) // Maintain O(1) duplicate detection
       }
 
       // Update photo count
@@ -694,8 +837,8 @@ export class EventRoom {
           // Add to playlist for synchronized playback
           this.addToPlaylist(photo)
 
-          // Broadcast to all clients (for participant view, grid mode, etc.)
-          await this.broadcast({
+          // Broadcast to Display clients only (reduces 99%+ broadcast volume)
+          this.broadcastToDisplays({
             type: 'photo_added',
             photo,
           })
@@ -799,8 +942,8 @@ export class EventRoom {
 
     const currentPhoto = this.playlistQueue[this.currentPlaylistIndex]
 
-    // Broadcast current photo to all clients
-    this.broadcast({
+    // Broadcast current photo to Display clients only
+    this.broadcastToDisplays({
       type: 'play_photo',
       photo: currentPhoto,
       index: this.currentPlaylistIndex,

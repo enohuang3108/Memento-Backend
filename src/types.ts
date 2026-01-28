@@ -7,6 +7,7 @@ export interface Event {
   expiresAt?: number
   status: 'active' | 'ended'
   driveFolderId: string // Required: Google Drive folder ID for photo storage
+  displayPassword?: string // 6-digit password for Display access control
   photoCount: number
   participantCount: number
 }

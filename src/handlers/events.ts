@@ -39,6 +39,9 @@ export async function createEvent(request: Request, env: Env): Promise<Response>
     const durableObjectId = env.EVENT_ROOM.idFromName(internalId)
     const stub = env.EVENT_ROOM.get(durableObjectId)
 
+    // Generate 6-digit display password for Display access control
+    const displayPassword = String(Math.floor(100000 + Math.random() * 900000))
+
     // Initialize event in DO
     const initRequest = new Request('http://internal/init', {
       method: 'POST',
@@ -47,6 +50,7 @@ export async function createEvent(request: Request, env: Env): Promise<Response>
         id: publicId, // Store the public ID in the event object for consistency
         title: body.title,
         driveFolderId: body.driveFolderId,
+        displayPassword,
       }),
     })
 
