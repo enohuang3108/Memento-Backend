@@ -3,6 +3,22 @@ import { createEvent, endEvent, getEvent } from '../handlers/events'
 import type { Env } from '../types'
 import { encryptId } from '../utils/crypto'
 
+interface EventResponse {
+  event?: {
+    id: string
+    title: string
+    status: string
+    driveFolderId: string
+    photoCount: number
+    participantCount: number
+  }
+  photos?: unknown[]
+  activeConnections?: number
+  error?: string
+  qrCodeUrl?: string
+  success?: boolean
+}
+
 /**
  * Integration Tests for Event Lifecycle API
  *
@@ -45,7 +61,7 @@ describe('Events Integration Tests', () => {
       GOOGLE_CLIENT_ID: 'test-client-id',
       GOOGLE_CLIENT_SECRET: 'test-client-secret',
       CORS_ALLOWED_ORIGINS: 'http://localhost:3000',
-    } as Env
+    } as unknown as Env
   })
 
   describe('createEvent', () => {
@@ -68,7 +84,7 @@ describe('Events Integration Tests', () => {
       })
 
       const response = await createEvent(request, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(201)
       expect(data.event).toBeDefined()
@@ -87,7 +103,7 @@ describe('Events Integration Tests', () => {
       })
 
       const response = await createEvent(request, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(400)
       expect(data.error).toBe('MISSING_DRIVE_FOLDER_ID')
@@ -106,7 +122,7 @@ describe('Events Integration Tests', () => {
       })
 
       const response = await createEvent(request, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(400)
       expect(data.error).toBe('INVALID_TITLE')
@@ -123,7 +139,7 @@ describe('Events Integration Tests', () => {
       })
 
       const response = await createEvent(request, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(400)
       expect(data.error).toBe('INVALID_DRIVE_FOLDER_ID')
@@ -156,7 +172,7 @@ describe('Events Integration Tests', () => {
       })
 
       const response = await createEvent(request, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(201)
       expect(data.event).toBeDefined()
@@ -181,7 +197,7 @@ describe('Events Integration Tests', () => {
       })
 
       const response = await createEvent(request, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       const encryptedId = encryptId(TEST_FOLDER_ID)
       expect(data.qrCodeUrl).toContain(encryptedId)
@@ -209,7 +225,7 @@ describe('Events Integration Tests', () => {
       )
 
       const response = await getEvent(activityId, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(200)
       expect(data.event).toBeDefined()
@@ -225,7 +241,7 @@ describe('Events Integration Tests', () => {
 
       // 實際行為: 返回 500 因為處理過程中拋出異常
       expect(response.status).toBe(500)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
       expect(data.error).toBe('INTERNAL_ERROR')
     })
 
@@ -240,7 +256,7 @@ describe('Events Integration Tests', () => {
       )
 
       const response = await getEvent(activityId, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(404)
       expect(data.error).toBe('EVENT_NOT_FOUND')
@@ -256,7 +272,7 @@ describe('Events Integration Tests', () => {
       )
 
       const response = await getEvent(activityId, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(500)
       expect(data.error).toBe('FETCH_FAILED')
@@ -276,11 +292,11 @@ describe('Events Integration Tests', () => {
       )
 
       const response = await endEvent(activityId, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(200)
       expect(data.success).toBe(true)
-      expect(data.event.status).toBe('ended')
+      expect(data.event!.status).toBe('ended')
       expect(mockEnv.EVENT_ROOM.idFromName).toHaveBeenCalledWith(TEST_FOLDER_ID)
     })
 
@@ -292,7 +308,7 @@ describe('Events Integration Tests', () => {
 
       // 實際行為: 返回 500 因為處理過程中拋出異常
       expect(response.status).toBe(500)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
       expect(data.error).toBe('INTERNAL_ERROR')
     })
 
@@ -307,7 +323,7 @@ describe('Events Integration Tests', () => {
       )
 
       const response = await endEvent(activityId, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(404)
       expect(data.error).toBe('EVENT_NOT_FOUND')
@@ -323,7 +339,7 @@ describe('Events Integration Tests', () => {
       )
 
       const response = await endEvent(activityId, mockEnv)
-      const data = await response.json()
+      const data = await response.json() as EventResponse
 
       expect(response.status).toBe(500)
       expect(data.error).toBe('END_FAILED')
@@ -350,7 +366,7 @@ describe('Events Integration Tests', () => {
       })
 
       const createResponse = await createEvent(createRequest, mockEnv)
-      const createData = await createResponse.json()
+      const createData = await createResponse.json() as EventResponse
 
       expect(createResponse.status).toBe(201)
       expect(createData.event).toBeDefined()
@@ -372,10 +388,10 @@ describe('Events Integration Tests', () => {
       )
 
       const getResponse = await getEvent(activityId, mockEnv)
-      const getData = await getResponse.json()
+      const getData = await getResponse.json() as EventResponse
 
       expect(getResponse.status).toBe(200)
-      expect(getData.event.status).toBe('active')
+      expect(getData.event!.status).toBe('active')
 
       // 3. 結束活動
       const endedEventData = { ...mockEventData, status: 'ended' }
@@ -387,11 +403,11 @@ describe('Events Integration Tests', () => {
       )
 
       const endResponse = await endEvent(activityId, mockEnv)
-      const endData = await endResponse.json()
+      const endData = await endResponse.json() as EventResponse
 
       expect(endResponse.status).toBe(200)
       expect(endData.success).toBe(true)
-      expect(endData.event.status).toBe('ended')
+      expect(endData.event!.status).toBe('ended')
     })
   })
 })

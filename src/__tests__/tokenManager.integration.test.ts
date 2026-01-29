@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getSystemAccessToken, isSystemAuthorized } from '../services/systemTokenManager'
 import type { Env } from '../types'
 
@@ -12,7 +12,7 @@ import type { Env } from '../types'
 describe('System Token Manager Integration Tests', () => {
   let mockEnv: Env
   let mockKVData: Record<string, string> = {}
-  const originalFetch = global.fetch
+  const originalFetch = globalThis.fetch
 
   beforeEach(() => {
     // Reset KV mock data
@@ -38,11 +38,11 @@ describe('System Token Manager Integration Tests', () => {
     } as Env
 
     // Mock fetch for OAuth API calls
-    global.fetch = vi.fn()
+    globalThis.fetch = vi.fn()
   })
 
   afterEach(() => {
-    global.fetch = originalFetch
+    globalThis.fetch = originalFetch
     vi.restoreAllMocks()
   })
 
@@ -60,7 +60,7 @@ describe('System Token Manager Integration Tests', () => {
       const accessToken = await getSystemAccessToken(mockEnv)
 
       expect(accessToken).toBe('test-access-token')
-      expect(mockEnv.SYSTEM_TOKENS.get).toHaveBeenCalledWith('google_drive_tokens')
+      expect(mockEnv.SYSTEM_TOKENS!.get).toHaveBeenCalledWith('google_drive_tokens')
     })
 
     it('應該在 token 過期前 5 分鐘自動刷新', async () => {
@@ -74,7 +74,7 @@ describe('System Token Manager Integration Tests', () => {
       mockKVData['google_drive_tokens'] = JSON.stringify(expiringToken)
 
       // Mock OAuth refresh response
-      const mockFetch = global.fetch as any
+      const mockFetch = globalThis.fetch as any
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -98,7 +98,7 @@ describe('System Token Manager Integration Tests', () => {
       )
 
       // Should have stored updated token in KV
-      expect(mockEnv.SYSTEM_TOKENS.put).toHaveBeenCalled()
+      expect(mockEnv.SYSTEM_TOKENS!.put).toHaveBeenCalled()
       const storedData = JSON.parse(mockKVData['google_drive_tokens'])
       expect(storedData.accessToken).toBe('new-access-token')
       expect(storedData.refreshToken).toBe('test-refresh-token')
@@ -115,7 +115,7 @@ describe('System Token Manager Integration Tests', () => {
       mockKVData['google_drive_tokens'] = JSON.stringify(expiringToken)
 
       // Mock OAuth refresh failure
-      const mockFetch = global.fetch as any
+      const mockFetch = globalThis.fetch as any
       mockFetch.mockResolvedValueOnce({
         ok: false,
         text: async () => 'Invalid refresh token',
@@ -246,7 +246,7 @@ describe('System Token Manager Integration Tests', () => {
       mockKVData['google_drive_tokens'] = JSON.stringify(oldToken)
 
       // Mock OAuth refresh response
-      const mockFetch = global.fetch as any
+      const mockFetch = globalThis.fetch as any
       const newExpiresIn = 3600 // 1 hour
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -287,7 +287,7 @@ describe('System Token Manager Integration Tests', () => {
       }
       mockKVData['google_drive_tokens'] = JSON.stringify(validToken)
 
-      const mockFetch = global.fetch as any
+      const mockFetch = globalThis.fetch as any
 
       // Call getSystemAccessToken multiple times
       const token1 = await getSystemAccessToken(mockEnv)

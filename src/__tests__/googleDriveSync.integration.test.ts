@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Env } from '../types'
 import { getSystemAccessToken } from '../services/systemTokenManager'
 
@@ -18,7 +18,7 @@ import { getSystemAccessToken } from '../services/systemTokenManager'
 describe('Google Drive Auto-Sync Integration Tests', () => {
   let mockEnv: Env
   let mockKVData: Record<string, string> = {}
-  const originalFetch = global.fetch
+  const originalFetch = globalThis.fetch
 
   beforeEach(() => {
     // Reset KV mock data
@@ -42,11 +42,11 @@ describe('Google Drive Auto-Sync Integration Tests', () => {
     } as Env
 
     // Mock fetch for API calls
-    global.fetch = vi.fn()
+    globalThis.fetch = vi.fn()
   })
 
   afterEach(() => {
-    global.fetch = originalFetch
+    globalThis.fetch = originalFetch
     vi.restoreAllMocks()
   })
 
@@ -75,7 +75,7 @@ describe('Google Drive Auto-Sync Integration Tests', () => {
       })
 
       // Mock OAuth refresh response
-      const mockFetch = global.fetch as any
+      const mockFetch = globalThis.fetch as any
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -105,7 +105,7 @@ describe('Google Drive Auto-Sync Integration Tests', () => {
       })
 
       // Mock OAuth refresh failure
-      const mockFetch = global.fetch as any
+      const mockFetch = globalThis.fetch as any
       mockFetch.mockResolvedValueOnce({
         ok: false,
         text: async () => 'Invalid refresh token',
@@ -183,7 +183,7 @@ describe('Google Drive Auto-Sync Integration Tests', () => {
       })
 
       // Mock network error
-      const mockFetch = global.fetch as any
+      const mockFetch = globalThis.fetch as any
       mockFetch.mockRejectedValueOnce(new Error('Network error'))
 
       await expect(getSystemAccessToken(mockEnv)).rejects.toThrow('Network error')
