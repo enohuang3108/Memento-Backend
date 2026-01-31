@@ -85,34 +85,6 @@ export default {
       return addCorsHeaders(response, corsHeaders)
     }
 
-    // POST /events/:activityId/verify-display - Verify display password
-    const verifyDisplayMatch = url.pathname.match(/^\/events\/([a-zA-Z0-9-_]+)\/verify-display$/)
-    if (verifyDisplayMatch && request.method === 'POST') {
-      const activityId = verifyDisplayMatch[1]
-      const internalId = decryptId(activityId)
-
-      if (!internalId) {
-        return addCorsHeaders(
-          new Response(JSON.stringify({ valid: false, error: 'Invalid activity ID' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-          corsHeaders
-        )
-      }
-
-      const durableObjectId = env.EVENT_ROOM.idFromName(internalId)
-      const stub = env.EVENT_ROOM.get(durableObjectId)
-      const doResponse = await stub.fetch(
-        new Request('http://internal/verify-display-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: request.body,
-        })
-      )
-      return addCorsHeaders(doResponse, corsHeaders)
-    }
-
     // WebSocket upgrade - GET /events/:activityId/ws
     const wsMatch = url.pathname.match(/^\/events\/([a-zA-Z0-9-_]+)\/ws$/)
     if (wsMatch && request.headers.get('Upgrade') === 'websocket') {

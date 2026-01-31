@@ -72,11 +72,6 @@ export class EventRoom {
       return this.handleNotifyPhoto(request)
     }
 
-    // Verify display password (POST /verify-display-password)
-    if (url.pathname === '/verify-display-password' && request.method === 'POST') {
-      return this.handleVerifyDisplayPassword(request)
-    }
-
     return new Response('Not found', { status: 404 })
   }
 
@@ -95,7 +90,6 @@ export class EventRoom {
       id: string
       title?: string
       driveFolderId?: string
-      displayPassword?: string
     }
 
     if (!body.driveFolderId) {
@@ -112,7 +106,6 @@ export class EventRoom {
       expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
       status: 'active',
       driveFolderId: body.driveFolderId,
-      displayPassword: body.displayPassword,
       photoCount: 0,
       participantCount: 0,
     }
@@ -249,42 +242,6 @@ export class EventRoom {
       JSON.stringify({ success: true, photo }),
       { headers: { 'Content-Type': 'application/json' } }
     )
-  }
-
-  /**
-   * Verify display password for Display access control
-   */
-  private async handleVerifyDisplayPassword(request: Request): Promise<Response> {
-    if (!this.event) {
-      return new Response(
-        JSON.stringify({ valid: false, error: 'Event not found' }),
-        { status: 404, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-
-    try {
-      const body = await request.json() as { password?: string }
-      const password = body.password?.trim()
-
-      if (!password) {
-        return new Response(
-          JSON.stringify({ valid: false, error: 'Password is required' }),
-          { status: 400, headers: { 'Content-Type': 'application/json' } }
-        )
-      }
-
-      const valid = password === this.event.displayPassword
-
-      return new Response(
-        JSON.stringify({ valid }),
-        { headers: { 'Content-Type': 'application/json' } }
-      )
-    } catch {
-      return new Response(
-        JSON.stringify({ valid: false, error: 'Invalid request' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
   }
 
   /**

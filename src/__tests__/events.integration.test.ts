@@ -80,7 +80,6 @@ describe('Events Integration Tests', () => {
         body: JSON.stringify({
           title: 'Test Event',
           driveFolderId: TEST_FOLDER_ID,
-          displayPassword: '1234',
         }),
       })
 
@@ -136,7 +135,6 @@ describe('Events Integration Tests', () => {
         body: JSON.stringify({
           title: 'Test Event',
           driveFolderId: 'invalid id!@#',
-          displayPassword: '1234',
         }),
       })
 
@@ -145,59 +143,6 @@ describe('Events Integration Tests', () => {
 
       expect(response.status).toBe(400)
       expect(data.error).toBe('INVALID_DRIVE_FOLDER_ID')
-    })
-
-    it('應該拒絕沒有 displayPassword 的請求', async () => {
-      const request = new Request('http://test.com/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'Test Event',
-          driveFolderId: TEST_FOLDER_ID,
-        }),
-      })
-
-      const response = await createEvent(request, mockEnv)
-      const data = await response.json() as EventResponse
-
-      expect(response.status).toBe(400)
-      expect(data.error).toBe('MISSING_PASSWORD')
-    })
-
-    it('應該拒絕非 4 位數的 displayPassword', async () => {
-      const request = new Request('http://test.com/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'Test Event',
-          driveFolderId: TEST_FOLDER_ID,
-          displayPassword: '12345', // 5 digits
-        }),
-      })
-
-      const response = await createEvent(request, mockEnv)
-      const data = await response.json() as EventResponse
-
-      expect(response.status).toBe(400)
-      expect(data.error).toBe('INVALID_PASSWORD')
-    })
-
-    it('應該拒絕非數字的 displayPassword', async () => {
-      const request = new Request('http://test.com/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'Test Event',
-          driveFolderId: TEST_FOLDER_ID,
-          displayPassword: 'abcd',
-        }),
-      })
-
-      const response = await createEvent(request, mockEnv)
-      const data = await response.json() as EventResponse
-
-      expect(response.status).toBe(400)
-      expect(data.error).toBe('INVALID_PASSWORD')
     })
 
     it('應該處理已存在的活動 (409)', async () => {
@@ -223,7 +168,6 @@ describe('Events Integration Tests', () => {
         body: JSON.stringify({
           title: 'Test Event',
           driveFolderId: TEST_FOLDER_ID,
-          displayPassword: '1234',
         }),
       })
 
@@ -249,7 +193,6 @@ describe('Events Integration Tests', () => {
         body: JSON.stringify({
           title: 'Test Event',
           driveFolderId: TEST_FOLDER_ID,
-          displayPassword: '1234',
         }),
       })
 
@@ -419,7 +362,6 @@ describe('Events Integration Tests', () => {
         body: JSON.stringify({
           title: 'Test Event',
           driveFolderId: TEST_FOLDER_ID,
-          displayPassword: '1234',
         }),
       })
 
