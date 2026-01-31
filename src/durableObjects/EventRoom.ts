@@ -37,12 +37,6 @@ export class EventRoom {
   private syncInterval: number | null = null
   private state: DurableObjectState<Record<string, never>>
 
-  // Playlist management for synchronized playback
-  private playlistQueue: Photo[] = []
-  private currentPlaylistIndex: number = 0
-  private playbackTimer: number | null = null
-  private readonly PLAYBACK_INTERVAL = 5000 // 5 seconds per photo
-
   constructor(state: DurableObjectState<Record<string, never>>, env: Env) {
     this.state = state
     this.env = env
@@ -171,8 +165,7 @@ export class EventRoom {
 
     this.event.status = 'ended'
 
-    // Stop playlist playback and photo sync
-    this.stopPlayback()
+    // Stop photo sync
     this.stopPhotoSync()
 
     // Broadcast to all connected clients
@@ -244,19 +237,11 @@ export class EventRoom {
     this.driveFileIdSet.add(photo.driveFileId)
     this.event.photoCount = this.photos.length
 
-    // Add to playlist
-    this.addToPlaylist(photo)
-
     // Broadcast to Display clients
     this.broadcastToDisplays({
       type: 'photo_added',
       photo,
     })
-
-    // Start playback if not already started and there are Display clients
-    if (this.playbackTimer === null && this.hasDisplayClients()) {
-      this.startPlayback()
-    }
 
     console.log(`[EventRoom] Instant photo notification: ${photo.driveFileId} (total: ${this.photos.length})`)
 
@@ -387,17 +372,8 @@ export class EventRoom {
               timestamp: Date.now(),
             }
 
-            // For Display clients, include playlist info
             if (role === 'display') {
-              joinedMessage.playlist = this.playlistQueue
-              joinedMessage.currentIndex = this.currentPlaylistIndex
-
-              console.log(`[EventRoom] Display client joined: ${sessionId}, playlist: ${this.playlistQueue.length} photos`)
-
-              // Start playback if we have photos
-              if (this.playlistQueue.length > 0 && this.playbackTimer === null) {
-                this.startPlayback()
-              }
+              console.log(`[EventRoom] Display client joined: ${sessionId}, photos: ${this.photos.length}`)
             }
 
             server.send(JSON.stringify(joinedMessage))
@@ -582,19 +558,11 @@ export class EventRoom {
       this.rateLimitState.set(sessionId, newState)
     }
 
-    // Add to playlist for synchronized playback
-    this.addToPlaylist(photo)
-
     // Broadcast to Display clients only (reduces 99%+ broadcast volume)
     this.broadcastToDisplays({
       type: 'photo_added',
       photo,
     })
-
-    // Start playback if not already started and there are Display clients
-    if (this.playbackTimer === null && this.hasDisplayClients()) {
-      this.startPlayback()
-    }
   }
 
   /**
@@ -829,24 +797,16 @@ export class EventRoom {
       // Update photo count
       this.event.photoCount = this.photos.length
 
-      // Add new photos to playlist and broadcast
+      // Broadcast new photos to Display clients
       if (newPhotos.length > 0) {
         console.log(`[EventRoom] Synced ${newPhotos.length} new photos from Drive (total: ${this.photos.length})`)
 
         for (const photo of newPhotos) {
-          // Add to playlist for synchronized playback
-          this.addToPlaylist(photo)
-
           // Broadcast to Display clients only (reduces 99%+ broadcast volume)
           this.broadcastToDisplays({
             type: 'photo_added',
             photo,
           })
-        }
-
-        // Start playback if not already started and there are Display clients
-        if (this.playbackTimer === null && this.hasDisplayClients()) {
-          this.startPlayback()
         }
       }
 
@@ -891,113 +851,4 @@ export class EventRoom {
     }
   }
 
-  // ============================================
-  // Playlist Management Methods
-  // ============================================
-
-  /**
-   * Fisher-Yates shuffle algorithm for fair randomization
-   */
-  private shuffleArray<T>(array: T[]): T[] {
-    const shuffled = [...array]
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-    }
-    return shuffled
-  }
-
-  /**
-   * Add a new photo to the playlist
-   * New photos are inserted after the current playback position for priority playback
-   */
-  private addToPlaylist(photo: Photo): void {
-    // Check if already in playlist
-    if (this.playlistQueue.some(p => p.id === photo.id)) {
-      return
-    }
-
-    // Insert after current position for priority playback
-    const insertIndex = this.currentPlaylistIndex + 1
-    this.playlistQueue.splice(insertIndex, 0, photo)
-
-    console.log(`[EventRoom] Added photo to playlist at index ${insertIndex}, total: ${this.playlistQueue.length}`)
-  }
-
-  /**
-   * Reshuffle the playlist when we've played through all photos
-   */
-  private reshufflePlaylist(): void {
-    this.playlistQueue = this.shuffleArray(this.playlistQueue)
-    this.currentPlaylistIndex = 0
-
-    console.log(`[EventRoom] Reshuffled playlist with ${this.playlistQueue.length} photos`)
-  }
-
-  /**
-   * Advance to the next photo and broadcast to all Display clients
-   */
-  private advancePlayback(): void {
-    if (this.playlistQueue.length === 0) return
-
-    const currentPhoto = this.playlistQueue[this.currentPlaylistIndex]
-
-    // Broadcast current photo to Display clients only
-    this.broadcastToDisplays({
-      type: 'play_photo',
-      photo: currentPhoto,
-      index: this.currentPlaylistIndex,
-      total: this.playlistQueue.length,
-      timestamp: Date.now(),
-    })
-
-    // Advance index
-    this.currentPlaylistIndex++
-
-    // If we've played through all photos, reshuffle
-    if (this.currentPlaylistIndex >= this.playlistQueue.length) {
-      this.reshufflePlaylist()
-    }
-  }
-
-  /**
-   * Start the playback timer (when there are Display clients connected)
-   */
-  private startPlayback(): void {
-    if (this.playbackTimer !== null) return
-    if (this.playlistQueue.length === 0) return
-
-    console.log(`[EventRoom] Starting playback with ${this.playlistQueue.length} photos`)
-
-    // Immediately play the current photo
-    this.advancePlayback()
-
-    // Set up timer for subsequent photos
-    this.playbackTimer = setInterval(() => {
-      this.advancePlayback()
-    }, this.PLAYBACK_INTERVAL) as unknown as number
-  }
-
-  /**
-   * Stop the playback timer
-   */
-  private stopPlayback(): void {
-    if (this.playbackTimer !== null) {
-      clearInterval(this.playbackTimer)
-      this.playbackTimer = null
-      console.log('[EventRoom] Stopped playback')
-    }
-  }
-
-  /**
-   * Check if there are any Display clients connected
-   */
-  private hasDisplayClients(): boolean {
-    for (const session of this.sessionMetadata.values()) {
-      if (session.role === 'display' && session.isActive) {
-        return true
-      }
-    }
-    return false
-  }
 }
