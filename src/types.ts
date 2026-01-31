@@ -7,7 +7,7 @@ export interface Event {
   expiresAt?: number
   status: 'active' | 'ended'
   driveFolderId: string // Required: Google Drive folder ID for photo storage
-  displayPassword?: string // 6-digit password for Display access control
+  displayPassword?: string // 4-digit password for Display access control (set by user)
   photoCount: number
   participantCount: number
 }
@@ -59,6 +59,7 @@ export type ServerMessage =
 export interface CreateEventRequest {
   title?: string
   driveFolderId: string // Required: Google Drive folder ID for photo storage
+  displayPassword: string // Required: 4-digit password for Display access control
 }
 
 export interface CreateEventResponse {

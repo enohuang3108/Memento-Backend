@@ -29,6 +29,15 @@ export async function createEvent(request: Request, env: Env): Promise<Response>
       return errorResponse('INVALID_DRIVE_FOLDER_ID', 'Invalid Google Drive Folder ID format', 400)
     }
 
+    // Validate display password (required, 4 digits)
+    if (!body.displayPassword) {
+      return errorResponse('MISSING_PASSWORD', 'Display password is required', 400)
+    }
+
+    if (!/^\d{4}$/.test(body.displayPassword)) {
+      return errorResponse('INVALID_PASSWORD', 'Password must be exactly 4 digits', 400)
+    }
+
     // Use Drive Folder ID as the internal Activity ID
     const internalId = body.driveFolderId
 
@@ -39,8 +48,8 @@ export async function createEvent(request: Request, env: Env): Promise<Response>
     const durableObjectId = env.EVENT_ROOM.idFromName(internalId)
     const stub = env.EVENT_ROOM.get(durableObjectId)
 
-    // Generate 6-digit display password for Display access control
-    const displayPassword = String(Math.floor(100000 + Math.random() * 900000))
+    // Use user-provided 4-digit display password
+    const displayPassword = body.displayPassword
 
     // Initialize event in DO
     const initRequest = new Request('http://internal/init', {
