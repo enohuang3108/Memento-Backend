@@ -476,6 +476,13 @@ export class EventRoom {
       return
     }
 
+    // Check for duplicate photo (already added via /notify-photo or Drive sync)
+    if (this.driveFileIdSet.has(message.driveFileId)) {
+      // Already exists, silently ignore (not an error, just a race condition)
+      console.log(`[EventRoom] Duplicate photo ignored via WebSocket: ${message.driveFileId}`)
+      return
+    }
+
     // Check rate limit (20 photos / 60 seconds)
     const state = this.rateLimitState.get(sessionId)
     if (state) {
