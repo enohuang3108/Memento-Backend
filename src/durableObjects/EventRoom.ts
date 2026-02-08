@@ -1,3 +1,4 @@
+import { getFolderName } from '../services/googleDriveOAuth'
 import { getSystemAccessToken } from '../services/systemTokenManager'
 import type {
   Event as ActivityEvent,
@@ -8,6 +9,7 @@ import type {
   Photo,
   ServerMessage,
 } from '../types'
+import { encryptId } from '../utils/crypto'
 import { filterProfanity } from '../utils/profanityFilter'
 import { generateULID } from '../utils/ulid'
 import { validateDanmakuContent, validatePhotoUpload } from '../utils/validation'
@@ -797,10 +799,20 @@ export class EventRoom {
 
       console.log(`[EventRoom] Auto-restarting event from driveFolderId: ${driveFolderId}`)
 
-      // Reinitialize the event
+      // Get folder name from Google Drive as title
+      let folderName: string | undefined
+      try {
+        const accessToken = await getSystemAccessToken(this.env)
+        folderName = await getFolderName(driveFolderId, accessToken)
+      } catch (error) {
+        console.error('[EventRoom] Failed to get folder name:', error)
+        // Continue without title if folder name fetch fails
+      }
+
+      // Reinitialize the event with encrypted ID
       this.event = {
-        id: driveFolderId, // Use driveFolderId as activity ID for now
-        title: undefined,
+        id: encryptId(driveFolderId), // Use encrypted ID for public use
+        title: folderName,
         createdAt: Date.now(),
         expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
         status: 'active',

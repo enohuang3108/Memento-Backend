@@ -259,3 +259,25 @@ export function getAuthorizationUrl(
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
+
+/**
+ * Get folder name from Google Drive
+ */
+export async function getFolderName(
+  folderId: string,
+  accessToken: string
+): Promise<string> {
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${folderId}?fields=name`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to get folder info");
+  }
+
+  const data = (await response.json()) as { name: string };
+  return data.name;
+}

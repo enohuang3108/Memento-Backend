@@ -6,6 +6,8 @@ import type {
 } from '../types'
 import { decryptId, encryptId } from '../utils/crypto'
 import { validateDriveFolderId } from '../utils/validation'
+import { getFolderName } from '../services/googleDriveOAuth'
+import { getSystemAccessToken } from '../services/systemTokenManager'
 
 /**
  * Create a new event/activity
@@ -15,11 +17,6 @@ export async function createEvent(request: Request, env: Env): Promise<Response>
   try {
     const body = await request.json() as CreateEventRequest
 
-    // Validate input
-    if (body.title && body.title.length > 100) {
-      return errorResponse('INVALID_TITLE', 'Title must be 100 characters or less', 400)
-    }
-
     // Validate Google Drive Folder ID (required)
     if (!body.driveFolderId) {
       return errorResponse('MISSING_DRIVE_FOLDER_ID', 'Google Drive Folder ID is required', 400)
@@ -27,6 +24,16 @@ export async function createEvent(request: Request, env: Env): Promise<Response>
 
     if (!validateDriveFolderId(body.driveFolderId)) {
       return errorResponse('INVALID_DRIVE_FOLDER_ID', 'Invalid Google Drive Folder ID format', 400)
+    }
+
+    // Get folder name from Google Drive as title
+    let folderName: string | undefined
+    try {
+      const accessToken = await getSystemAccessToken(env)
+      folderName = await getFolderName(body.driveFolderId, accessToken)
+    } catch (error) {
+      console.error('[createEvent] Failed to get folder name:', error)
+      // Continue without title if folder name fetch fails
     }
 
     // Use Drive Folder ID as the internal Activity ID
@@ -45,7 +52,7 @@ export async function createEvent(request: Request, env: Env): Promise<Response>
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: publicId, // Store the public ID in the event object for consistency
-        title: body.title,
+        title: folderName,
         driveFolderId: body.driveFolderId,
       }),
     })
