@@ -46,7 +46,7 @@ export type ClientMessage =
   | { type: 'ping' }
 
 export type ServerMessage =
-  | { type: 'joined'; activityId: string; photos: Photo[]; timestamp: number; playlist?: Photo[]; currentIndex?: number }
+  | { type: 'joined'; activityId: string; photos: Photo[]; timestamp: number; title?: string; playlist?: Photo[]; currentIndex?: number }
   | { type: 'photo_added'; photo: Photo }
   | { type: 'play_photo'; photo: Photo; index: number; total: number; timestamp: number }
   | { type: 'danmaku'; id: string; content: string; sessionId: string; timestamp: number }

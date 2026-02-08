@@ -323,12 +323,26 @@ export class EventRoom {
             // Update participant count
             this.event!.participantCount = this.sessionMetadata.size
 
+            // Fetch latest folder name from Google Drive
+            try {
+              const systemToken = await getSystemAccessToken(this.env)
+              const folderName = await getFolderName(this.event!.driveFolderId, systemToken)
+              if (folderName && folderName !== this.event!.title) {
+                console.log(`[EventRoom] Folder name updated: "${this.event!.title}" → "${folderName}"`)
+                this.event!.title = folderName
+              }
+            } catch (error) {
+              console.error('[EventRoom] Failed to get folder name on join:', error)
+              // Continue with existing title
+            }
+
             // Prepare joined response
             const joinedMessage: ServerMessage = {
               type: 'joined',
               activityId: this.event!.id,
               photos: this.photos,
               timestamp: Date.now(),
+              title: this.event!.title,
             }
 
             if (role === 'display') {
@@ -362,11 +376,25 @@ export class EventRoom {
 
             this.event!.participantCount = this.sessionMetadata.size
 
+            // Fetch latest folder name from Google Drive
+            try {
+              const systemToken = await getSystemAccessToken(this.env)
+              const folderName = await getFolderName(this.event!.driveFolderId, systemToken)
+              if (folderName && folderName !== this.event!.title) {
+                console.log(`[EventRoom] Folder name updated: "${this.event!.title}" → "${folderName}"`)
+                this.event!.title = folderName
+              }
+            } catch (error) {
+              console.error('[EventRoom] Failed to get folder name on join:', error)
+              // Continue with existing title
+            }
+
             server.send(JSON.stringify({
               type: 'joined',
               activityId: this.event!.id,
               photos: this.photos,
               timestamp: Date.now(),
+              title: this.event!.title,
             } as ServerMessage))
 
             return
