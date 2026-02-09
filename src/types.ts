@@ -51,7 +51,7 @@ export type ServerMessage =
   | { type: 'play_photo'; photo: Photo; index: number; total: number; timestamp: number }
   | { type: 'danmaku'; id: string; content: string; sessionId: string; timestamp: number }
   | { type: 'activity_ended'; activityId: string; reason: string; timestamp: number }
-  | { type: 'pong'; timestamp: number }
+  | { type: 'pong' }
   | { type: 'error'; code: string; message: string; retryAfter?: number }
 
 // API request/response types

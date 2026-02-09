@@ -457,12 +457,25 @@ export class EventRoom {
       return
     }
 
+    // Get actual sessionId from WebSocket mapping
+    const actualSessionId = this.wsToSessionId.get(ws)
+
+    // Check if session metadata exists (may be lost after DO eviction)
+    if (!actualSessionId || !this.sessionMetadata.has(actualSessionId)) {
+      // Session metadata lost - request client to reconnect
+      ws.send(JSON.stringify({
+        type: 'error',
+        code: 'SESSION_EXPIRED',
+        message: 'Session expired, please reconnect',
+      } as ServerMessage))
+      ws.close(4000, 'Session expired')
+      return
+    }
+
     switch (message.type) {
       case 'ping':
-        ws.send(JSON.stringify({
-          type: 'pong',
-          timestamp: Date.now(),
-        } as ServerMessage))
+        // Fixed format for react-use-websocket heartbeat compatibility
+        ws.send('{"type":"pong"}')
         break
 
       case 'photo_added':
