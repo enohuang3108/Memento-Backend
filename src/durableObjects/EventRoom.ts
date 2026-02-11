@@ -101,6 +101,9 @@ export class EventRoom {
       )
     }
 
+    // Persist driveFolderId to storage for recovery after DO eviction
+    await this.state.storage.put('driveFolderId', body.driveFolderId)
+
     this.event = {
       id: body.id,
       title: body.title,
@@ -112,6 +115,8 @@ export class EventRoom {
       participantCount: 0,
     }
 
+    console.log(`[EventRoom] Event initialized and driveFolderId persisted: ${body.driveFolderId}`)
+
     return new Response(
       JSON.stringify({ event: this.event }),
       { headers: { 'Content-Type': 'application/json' } }
@@ -122,12 +127,17 @@ export class EventRoom {
    * Get current event state
    */
   private async handleGetEvent(): Promise<Response> {
+    console.log(`[EventRoom] handleGetEvent called, event exists: ${this.event !== null}`)
+
     // Auto-restart if event is null
     if (!this.event) {
+      console.log(`[EventRoom] Event is null, attempting auto-restart...`)
       await this.autoRestartEvent()
+      console.log(`[EventRoom] Auto-restart completed, event exists: ${this.event !== null}`)
     }
 
     if (!this.event) {
+      console.error(`[EventRoom] Event still null after auto-restart, returning 404`)
       return new Response(
         JSON.stringify({ error: 'Event not found' }),
         { status: 404, headers: { 'Content-Type': 'application/json' } }
@@ -302,9 +312,21 @@ export class EventRoom {
         if (message.type === 'join' && message.sessionId) {
           const { sessionId, role } = message
 
+          console.log(`[EventRoom] Join request: sessionId=${sessionId}, role=${role}, tempId=${tempId}`)
+          console.log(`[EventRoom] sessions.has(tempId)=${this.sessions.has(tempId)}, sessions.size=${this.sessions.size}`)
+
           // Move from temp ID to actual session ID
-          if (this.sessions.has(tempId)) {
-            this.sessions.delete(tempId)
+          // Check if tempId exists OR if this is a reconnect with same sessionId
+          const hasTempId = this.sessions.has(tempId)
+          const isReconnect = !hasTempId && this.wsToSessionId.get(server) === tempId
+
+          if (hasTempId || isReconnect) {
+            // Clean up tempId if it exists
+            if (hasTempId) {
+              this.sessions.delete(tempId)
+            }
+
+            // Set the actual session (will overwrite if reconnecting with same sessionId)
             this.sessions.set(sessionId, server)
             this.wsToSessionId.set(server, sessionId) // Update WebSocket -> sessionId mapping
 
@@ -323,20 +345,7 @@ export class EventRoom {
             // Update participant count
             this.event!.participantCount = this.sessionMetadata.size
 
-            // Fetch latest folder name from Google Drive
-            try {
-              const systemToken = await getSystemAccessToken(this.env)
-              const folderName = await getFolderName(this.event!.driveFolderId, systemToken)
-              if (folderName && folderName !== this.event!.title) {
-                console.log(`[EventRoom] Folder name updated: "${this.event!.title}" → "${folderName}"`)
-                this.event!.title = folderName
-              }
-            } catch (error) {
-              console.error('[EventRoom] Failed to get folder name on join:', error)
-              // Continue with existing title
-            }
-
-            // Prepare joined response
+            // Send joined response BEFORE async operations to avoid race conditions
             const joinedMessage: ServerMessage = {
               type: 'joined',
               activityId: this.event!.id,
@@ -350,7 +359,24 @@ export class EventRoom {
             }
 
             server.send(JSON.stringify(joinedMessage))
+
+            // Fetch latest folder name from Google Drive (async, non-blocking)
+            // This runs after the joined message is sent
+            getSystemAccessToken(this.env)
+              .then(systemToken => getFolderName(this.event!.driveFolderId, systemToken))
+              .then(folderName => {
+                if (folderName && this.event && folderName !== this.event.title) {
+                  console.log(`[EventRoom] Folder name updated: "${this.event.title}" → "${folderName}"`)
+                  this.event.title = folderName
+                }
+              })
+              .catch(error => {
+                console.error('[EventRoom] Failed to get folder name on join:', error)
+              })
+
             return
+          } else {
+            console.error(`[EventRoom] Join failed: tempId not found. tempId=${tempId}, sessions keys:`, [...this.sessions.keys()])
           }
         }
 
@@ -376,19 +402,7 @@ export class EventRoom {
 
             this.event!.participantCount = this.sessionMetadata.size
 
-            // Fetch latest folder name from Google Drive
-            try {
-              const systemToken = await getSystemAccessToken(this.env)
-              const folderName = await getFolderName(this.event!.driveFolderId, systemToken)
-              if (folderName && folderName !== this.event!.title) {
-                console.log(`[EventRoom] Folder name updated: "${this.event!.title}" → "${folderName}"`)
-                this.event!.title = folderName
-              }
-            } catch (error) {
-              console.error('[EventRoom] Failed to get folder name on join:', error)
-              // Continue with existing title
-            }
-
+            // Send joined response BEFORE async operations
             server.send(JSON.stringify({
               type: 'joined',
               activityId: this.event!.id,
@@ -396,6 +410,19 @@ export class EventRoom {
               timestamp: Date.now(),
               title: this.event!.title,
             } as ServerMessage))
+
+            // Fetch latest folder name from Google Drive (async, non-blocking)
+            getSystemAccessToken(this.env)
+              .then(systemToken => getFolderName(this.event!.driveFolderId, systemToken))
+              .then(folderName => {
+                if (folderName && this.event && folderName !== this.event.title) {
+                  console.log(`[EventRoom] Folder name updated: "${this.event.title}" → "${folderName}"`)
+                  this.event.title = folderName
+                }
+              })
+              .catch(error => {
+                console.error('[EventRoom] Failed to get folder name on join:', error)
+              })
 
             return
           }
@@ -417,16 +444,22 @@ export class EventRoom {
       const actualSessionId = this.wsToSessionId.get(server)
 
       if (actualSessionId) {
-        // Remove session using the actual sessionId
-        this.sessions.delete(actualSessionId)
-        this.sessionMetadata.delete(actualSessionId)
-        this.rateLimitState.delete(actualSessionId)
-        this.wsToSessionId.delete(server)
+        // Only remove session if the current WebSocket is the one being closed
+        // This prevents race condition where a reconnected client's session
+        // gets deleted by the old connection's close handler
+        if (this.sessions.get(actualSessionId) === server) {
+          this.sessions.delete(actualSessionId)
+          this.sessionMetadata.delete(actualSessionId)
+          this.rateLimitState.delete(actualSessionId)
 
-        // Update participant count
-        if (this.event) {
-          this.event.participantCount = this.sessionMetadata.size
+          // Update participant count
+          if (this.event) {
+            this.event.participantCount = this.sessionMetadata.size
+          }
         }
+
+        // Always clean up the wsToSessionId mapping for the closed WebSocket
+        this.wsToSessionId.delete(server)
       }
     })
 
@@ -823,18 +856,26 @@ export class EventRoom {
   }
 
   /**
-   * Auto-restart event from Durable Object name (which is the driveFolderId)
+   * Auto-restart event from persisted storage or Durable Object name
    */
   private async autoRestartEvent(): Promise<void> {
     try {
-      // Get the driveFolderId from DO's name
-      // Note: state.id.name is a synchronous property
-      const driveFolderId = this.state.id.name
+      // Try to get driveFolderId from persisted storage first (more reliable)
+      let driveFolderId = await this.state.storage.get<string>('driveFolderId')
 
-      console.log(`[EventRoom] Attempting auto-restart, DO name: "${driveFolderId}"`)
+      console.log(`[EventRoom] Attempting auto-restart:`)
+      console.log(`[EventRoom]   - DO id: ${this.state.id.toString()}`)
+      console.log(`[EventRoom]   - DO name: "${this.state.id.name}"`)
+      console.log(`[EventRoom]   - Persisted driveFolderId: "${driveFolderId}"`)
+
+      // Fallback to DO name if storage is empty
+      if (!driveFolderId) {
+        driveFolderId = this.state.id.name
+        console.log(`[EventRoom]   - Using DO name as fallback: "${driveFolderId}"`)
+      }
 
       if (!driveFolderId) {
-        console.error('[EventRoom] Cannot auto-restart: no DO name found')
+        console.error('[EventRoom] Cannot auto-restart: no driveFolderId found in storage or DO name')
         return
       }
 
