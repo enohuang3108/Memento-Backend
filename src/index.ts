@@ -107,7 +107,13 @@ export default {
 
       const durableObjectId = env.EVENT_ROOM.idFromName(internalId)
       const stub = env.EVENT_ROOM.get(durableObjectId)
-      return stub.fetch(request)
+
+      // Add driveFolderId to request URL for auto-restart
+      const wsUrl = new URL(request.url)
+      wsUrl.searchParams.set('driveFolderId', internalId)
+      const requestWithFolderId = new Request(wsUrl.toString(), request)
+
+      return stub.fetch(requestWithFolderId)
     }
 
     return new Response('Not found', { status: 404, headers: corsHeaders })
