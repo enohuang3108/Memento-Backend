@@ -857,21 +857,24 @@ export class EventRoom {
 
   /**
    * Auto-restart event from persisted storage or Durable Object name
+   * @param providedDriveFolderId - Optional driveFolderId from request (highest priority)
    */
-  private async autoRestartEvent(): Promise<void> {
+  private async autoRestartEvent(providedDriveFolderId?: string | null): Promise<void> {
     try {
-      // Try to get driveFolderId from persisted storage first (more reliable)
-      let driveFolderId = await this.state.storage.get<string>('driveFolderId')
+      // Priority: provided > storage > DO name
+      const storedDriveFolderId = await this.state.storage.get<string>('driveFolderId')
+      let driveFolderId = providedDriveFolderId || storedDriveFolderId || this.state.id.name
 
       console.log(`[EventRoom] Attempting auto-restart:`)
+      console.log(`[EventRoom]   - Provided driveFolderId: "${providedDriveFolderId}"`)
       console.log(`[EventRoom]   - DO id: ${this.state.id.toString()}`)
       console.log(`[EventRoom]   - DO name: "${this.state.id.name}"`)
-      console.log(`[EventRoom]   - Persisted driveFolderId: "${driveFolderId}"`)
+      console.log(`[EventRoom]   - Persisted driveFolderId: "${storedDriveFolderId}"`)
+      console.log(`[EventRoom]   - Using: "${driveFolderId}"`)
 
-      // Fallback to DO name if storage is empty
       if (!driveFolderId) {
-        driveFolderId = this.state.id.name
-        console.log(`[EventRoom]   - Using DO name as fallback: "${driveFolderId}"`)
+        console.error('[EventRoom] Cannot auto-restart: no driveFolderId found')
+        return
       }
 
       if (!driveFolderId) {
