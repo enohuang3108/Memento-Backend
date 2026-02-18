@@ -61,7 +61,7 @@ export class EventRoom {
 
     // Get event info (GET /)
     if (url.pathname === '/' && request.method === 'GET') {
-      return this.handleGetEvent()
+      return this.handleGetEvent(request)
     }
 
     // End event (DELETE /)
@@ -126,13 +126,17 @@ export class EventRoom {
   /**
    * Get current event state
    */
-  private async handleGetEvent(): Promise<Response> {
-    console.log(`[EventRoom] handleGetEvent called, event exists: ${this.event !== null}`)
+  private async handleGetEvent(request: Request): Promise<Response> {
+    // Extract driveFolderId from query parameter
+    const url = new URL(request.url)
+    const driveFolderId = url.searchParams.get('driveFolderId')
+
+    console.log(`[EventRoom] handleGetEvent called, event exists: ${this.event !== null}, driveFolderId: ${driveFolderId}`)
 
     // Auto-restart if event is null
     if (!this.event) {
       console.log(`[EventRoom] Event is null, attempting auto-restart...`)
-      await this.autoRestartEvent()
+      await this.autoRestartEvent(driveFolderId)
       console.log(`[EventRoom] Auto-restart completed, event exists: ${this.event !== null}`)
     }
 
