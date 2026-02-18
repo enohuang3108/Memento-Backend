@@ -120,10 +120,11 @@ export async function getEvent(activityId: string, env: Env): Promise<Response> 
     const durableObjectId = env.EVENT_ROOM.idFromName(internalId)
     const stub = env.EVENT_ROOM.get(durableObjectId)
 
-    // Get event from DO
-    const doRequest = new Request('http://internal/', {
-      method: 'GET',
-    })
+    // Get event from DO (with driveFolderId for auto-restart)
+    const doRequest = new Request(
+      `http://internal/?driveFolderId=${encodeURIComponent(internalId)}`,
+      { method: 'GET' }
+    )
 
     const doResponse = await stub.fetch(doRequest)
     if (!doResponse.ok) {
