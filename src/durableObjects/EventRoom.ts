@@ -263,10 +263,14 @@ export class EventRoom {
   /**
    * Handle WebSocket upgrade
    */
-  private async handleWebSocketUpgrade(_request: Request): Promise<Response> {
+  private async handleWebSocketUpgrade(request: Request): Promise<Response> {
+    // Extract driveFolderId from query parameter
+    const url = new URL(request.url)
+    const driveFolderId = url.searchParams.get('driveFolderId')
+
     // Auto-restart if event is null (DO was evicted)
     if (!this.event) {
-      await this.autoRestartEvent()
+      await this.autoRestartEvent(driveFolderId)
     }
 
     if (!this.event) {
